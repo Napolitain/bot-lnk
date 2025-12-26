@@ -2,14 +2,43 @@ import { Page } from 'playwright';
 import { config } from '../config.js';
 import { dismissPopups } from './popups.js';
 
-async function isLoggedIn(page: Page): Promise<boolean> {
-  // Check if we're already in the game (buildings button visible)
+async function isInGame(page: Page): Promise<boolean> {
+  // Check multiple indicators that we're in the game
   try {
+    // Check for buildings button
     const buildingsBtn = page.getByRole('button', { name: 'Current building upgrades' });
-    return await buildingsBtn.isVisible({ timeout: 3000 });
+    if (await buildingsBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      return true;
+    }
+
+    // Check for game top bar (player name, resources, etc.)
+    const gameBar = page.locator('#game-bar-top');
+    if (await gameBar.isVisible({ timeout: 2000 }).catch(() => false)) {
+      return true;
+    }
+
+    // Check for castle button
+    const castleBtn = page.getByRole('button', { name: 'Castle' });
+    if (await castleBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      return true;
+    }
+
+    return false;
   } catch {
     return false;
   }
+}
+
+async function waitForGameLoad(page: Page, timeoutMs = 10000): Promise<boolean> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    await dismissPopups(page);
+    if (await isInGame(page)) {
+      return true;
+    }
+    await page.waitForTimeout(500);
+  }
+  return false;
 }
 
 async function isOnLoginPage(page: Page): Promise<boolean> {
@@ -58,9 +87,9 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
   // Dismiss any popups first
   await dismissPopups(page);
 
-  // Check if already logged in
-  if (await isLoggedIn(page)) {
-    console.log('Already logged in!');
+  // Check if already in game
+  if (await isInGame(page)) {
+    console.log('Already in game!');
     return true;
   }
 
@@ -68,9 +97,8 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
   if (await isOnServerSelect(page)) {
     console.log('On server select, choosing server...');
     await page.getByText(config.server).click();
-    await page.waitForTimeout(3000);
-    await dismissPopups(page);
-    return await isLoggedIn(page);
+    console.log('Waiting for game to load...');
+    return await waitForGameLoad(page);
   }
 
   // Check if on login page FIRST (priority over PLAY NOW)
@@ -97,12 +125,10 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
     // Select server if visible
     if (await isOnServerSelect(page)) {
       await page.getByText(config.server).click();
-      await page.waitForTimeout(3000);
     }
 
-    await dismissPopups(page);
-    console.log('Login completed!');
-    return await isLoggedIn(page);
+    console.log('Waiting for game to load...');
+    return await waitForGameLoad(page);
   }
 
   // Check if "PLAY NOW" button is visible (no login form, already have session)
@@ -115,10 +141,10 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
     // After PLAY NOW, we should be on server select
     if (await isOnServerSelect(page)) {
       await page.getByText(config.server).click();
-      await page.waitForTimeout(3000);
-      await dismissPopups(page);
     }
-    return await isLoggedIn(page);
+
+    console.log('Waiting for game to load...');
+    return await waitForGameLoad(page);
   }
 
   console.log(`Unknown page state (attempt ${retryCount + 1}/${config.maxLoginRetries}), clearing cache and reloading...`);
