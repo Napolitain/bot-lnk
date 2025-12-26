@@ -338,6 +338,34 @@ async function getNextActionForCastle(
   }
 }
 
+async function clickFreeFinishButtons(page: Page): Promise<number> {
+  // Find and click all free finish buttons (instant complete for short builds)
+  const freeFinishBtns = page.locator('.icon-build-finish-free-2').locator('..');
+  const count = await freeFinishBtns.count();
+  
+  if (count > 0) {
+    console.log(`Found ${count} free finish button(s), clicking...`);
+    for (let i = 0; i < count; i++) {
+      try {
+        const btn = freeFinishBtns.nth(i);
+        if (await btn.isVisible()) {
+          if (DRY_RUN) {
+            console.log(`[DRY RUN] Would click free finish button ${i + 1}`);
+          } else {
+            await btn.click();
+            await page.waitForTimeout(500);
+            console.log(`Clicked free finish button ${i + 1}`);
+          }
+        }
+      } catch (e) {
+        console.log(`Failed to click free finish button ${i + 1}:`, e);
+      }
+    }
+  }
+  
+  return count;
+}
+
 async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<void> {
   // Ensure we're logged in and on buildings view
   const loggedIn = await login(page);
@@ -350,6 +378,9 @@ async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): 
   if (!onBuildings) {
     throw new Error('Failed to navigate to buildings view');
   }
+
+  // Click any free finish buttons first
+  await clickFreeFinishButtons(page);
 
   // Read all castles with resources and buildings
   const castles = await getCastles(page);
