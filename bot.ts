@@ -264,6 +264,54 @@ async function isOnLoginPage(page: Page): Promise<boolean> {
   }
 }
 
+async function isOnPlayNow(page: Page): Promise<boolean> {
+  try {
+    const playNowBtn = page.getByText('PLAY NOW');
+    return await playNowBtn.isVisible({ timeout: 3000 });
+  } catch {
+    return false;
+  }
+}
+
+async function dismissPopups(page: Page): Promise<void> {
+  // Dismiss any event popups or dialogs that appear
+  try {
+    // Event popup button
+    const eventPopup = page.locator('div.event-pop-up-button');
+    if (await eventPopup.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await eventPopup.click();
+      console.log('Dismissed event popup');
+      await page.waitForTimeout(500);
+    }
+
+    // OK button in dialogs
+    const okBtn = page.getByRole('button', { name: 'OK' });
+    if (await okBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await okBtn.click();
+      console.log('Clicked OK on dialog');
+      await page.waitForTimeout(500);
+    }
+
+    // Accept button
+    const acceptBtn = page.getByText('Accept', { exact: true });
+    if (await acceptBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await acceptBtn.click();
+      console.log('Clicked Accept');
+      await page.waitForTimeout(500);
+    }
+
+    // Red accept button
+    const redAcceptBtn = page.locator('.event-pop-up-button.ButtonRedAccept');
+    if (await redAcceptBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await redAcceptBtn.click();
+      console.log('Clicked red accept button');
+      await page.waitForTimeout(500);
+    }
+  } catch {
+    // Ignore popup dismissal errors
+  }
+}
+
 async function isOnServerSelect(page: Page): Promise<boolean> {
   const server = process.env.SERVER || '';
   try {
@@ -299,6 +347,9 @@ async function login(page: Page, retryCount = 0): Promise<boolean> {
     await page.waitForTimeout(2000);
   }
 
+  // Dismiss any popups first
+  await dismissPopups(page);
+
   // Check if already logged in
   if (await isLoggedIn(page)) {
     console.log('Already logged in!');
@@ -310,6 +361,23 @@ async function login(page: Page, retryCount = 0): Promise<boolean> {
     console.log('On server select, choosing server...');
     await page.getByText(server).click();
     await page.waitForTimeout(3000);
+    await dismissPopups(page);
+    return await isLoggedIn(page);
+  }
+
+  // Check if "PLAY NOW" button is visible (already logged in from previous session)
+  if (await isOnPlayNow(page)) {
+    console.log('Found PLAY NOW button, clicking...');
+    await page.getByText('PLAY NOW').click();
+    await page.waitForTimeout(2000);
+    await dismissPopups(page);
+    
+    // After PLAY NOW, we should be on server select
+    if (await isOnServerSelect(page)) {
+      await page.getByText(server).click();
+      await page.waitForTimeout(3000);
+      await dismissPopups(page);
+    }
     return await isLoggedIn(page);
   }
 
@@ -428,17 +496,26 @@ async function clickFreeFinishButtons(page: Page): Promise<number> {
 }
 
 async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<void> {
+  // Dismiss any popups first
+  await dismissPopups(page);
+
   // Ensure we're logged in and on buildings view
   const loggedIn = await login(page);
   if (!loggedIn) {
     throw new Error('Failed to login');
   }
 
+  // Dismiss popups again after login
+  await dismissPopups(page);
+
   // Navigate to buildings view
   const onBuildings = await navigateToBuildingsView(page);
   if (!onBuildings) {
     throw new Error('Failed to navigate to buildings view');
   }
+
+  // Dismiss any popups that appeared
+  await dismissPopups(page);
 
   // Read all castles with resources and buildings
   const castles = await getCastles(page);
