@@ -121,8 +121,15 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
     return await isLoggedIn(page);
   }
 
-  console.log(`Unknown page state (attempt ${retryCount + 1}/${config.maxLoginRetries}), navigating to login...`);
-  await page.goto('https://lordsandknights.com/');
+  console.log(`Unknown page state (attempt ${retryCount + 1}/${config.maxLoginRetries}), clearing cache and reloading...`);
+  
+  // Clear cache and cookies to start fresh
+  const context = page.context();
+  await context.clearCookies();
+  
+  // Navigate fresh
+  await page.goto('https://lordsandknights.com/', { waitUntil: 'networkidle' });
   await page.waitForTimeout(3000);
+  
   return await login(page, retryCount + 1);
 }
