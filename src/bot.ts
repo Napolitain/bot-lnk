@@ -14,6 +14,10 @@ import { getCastles } from './game/castle.js';
 import { getNextActionsForCastle } from './client/solver.js';
 
 export async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<void> {
+  // Reload page to get fresh resource values
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(2000);
+
   // Dismiss any popups first
   await dismissPopups(page);
 
