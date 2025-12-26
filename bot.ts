@@ -122,9 +122,9 @@ async function getCastles(page: Page): Promise<CastleState[]> {
       const levelText = await upgradeCell.locator('> div').first().textContent();
       const level = parseInt(levelText || '0', 10);
 
-      // Check if upgrade button exists and is enabled
-      const upgradeBtn = upgradeCell.locator('button.button--action');
-      const canUpgrade = await upgradeBtn.count() > 0 && await upgradeBtn.isEnabled();
+      // Check if upgrade button exists and is enabled (use first() to avoid strict mode with multiple buttons)
+      const upgradeBtn = upgradeCell.locator('button.button--action').first();
+      const canUpgrade = await upgradeBtn.count() > 0 && await upgradeBtn.isEnabled().catch(() => false);
 
       const buildingType = BUILDING_NAME_TO_TYPE[BUILDING_TYPES[j]];
       buildingLevels.push({ type: buildingType, level });
@@ -165,9 +165,10 @@ async function upgradeBuilding(page: Page, castleIndex: number, buildingType: Bu
     const buildingCells = row.locator('.tabular-cell--upgrade-building');
     const cell = buildingCells.nth(buildingIndex);
 
-    const upgradeBtn = cell.locator('button.button--action');
+    // Use first() to handle cells with multiple buttons (e.g., upgrade + cancel)
+    const upgradeBtn = cell.locator('button.button--action').first();
 
-    if (await upgradeBtn.isEnabled()) {
+    if (await upgradeBtn.isEnabled().catch(() => false)) {
       if (DRY_RUN) {
         console.log(`[DRY RUN] Would click upgrade button for ${buildingTypeToJSON(buildingType)} in castle ${castleIndex}`);
         return true;
@@ -220,7 +221,14 @@ async function isOnServerSelect(page: Page): Promise<boolean> {
   }
 }
 
-async function login(page: Page): Promise<boolean> {
+async function login(page: Page, retryCount = 0): Promise<boolean> {
+  const MAX_LOGIN_RETRIES = 3;
+  
+  if (retryCount >= MAX_LOGIN_RETRIES) {
+    console.error(`Login failed after ${MAX_LOGIN_RETRIES} attempts`);
+    return false;
+  }
+
   console.log('Checking login state...');
   
   const email = process.env.EMAIL;
@@ -283,10 +291,10 @@ async function login(page: Page): Promise<boolean> {
     return await isLoggedIn(page);
   }
 
-  console.log('Unknown page state, navigating to login...');
+  console.log(`Unknown page state (attempt ${retryCount + 1}/${MAX_LOGIN_RETRIES}), navigating to login...`);
   await page.goto('https://lordsandknights.com/');
-  await page.waitForTimeout(2000);
-  return await login(page); // Retry
+  await page.waitForTimeout(3000);
+  return await login(page, retryCount + 1);
 }
 
 // Default target levels (same as solver defaults)
