@@ -5,6 +5,7 @@ import {
   CastleConfig,
 } from '../generated/proto/config.js';
 import { BUILDING_NAME_TO_TYPE, BUILDING_TYPES } from './mappings.js';
+import { dismissPopups } from '../browser/popups.js';
 
 export interface CastleState {
   name: string;
@@ -13,6 +14,9 @@ export interface CastleState {
 }
 
 export async function getCastles(page: Page): Promise<CastleState[]> {
+  // Dismiss popups before reading
+  await dismissPopups(page);
+
   const castles: CastleState[] = [];
 
   // Get all castle rows (exclude header row)

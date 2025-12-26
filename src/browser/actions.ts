@@ -6,6 +6,7 @@ import {
 } from '../generated/proto/config.js';
 import { config } from '../config.js';
 import { BUILDING_TYPE_TO_INDEX, TECHNOLOGY_TO_NAME } from '../game/mappings.js';
+import { dismissPopups } from './popups.js';
 
 export async function upgradeBuilding(page: Page, castleIndex: number, buildingType: BuildingType): Promise<boolean> {
   const buildingIndex = BUILDING_TYPE_TO_INDEX[buildingType];
@@ -15,6 +16,9 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
   }
 
   try {
+    // Dismiss popups before action
+    await dismissPopups(page);
+
     const castleRows = page.locator('.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)');
     const row = castleRows.nth(castleIndex);
     const buildingCells = row.locator('.tabular-cell--upgrade-building');
@@ -33,6 +37,7 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
       await page.waitForTimeout(500);
 
       // Check for confirmation dialog
+      await dismissPopups(page);
       const confirmBtn = page.locator('.dialog button.button--action, div:nth-child(2) > .button');
       if (await confirmBtn.count() > 0) {
         await confirmBtn.first().click();
@@ -55,6 +60,9 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
   }
 
   try {
+    // Dismiss popups before action
+    await dismissPopups(page);
+
     if (config.dryRun) {
       console.log(`[DRY RUN] Would research ${techName}`);
       return true;
@@ -65,6 +73,7 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
     if (await libraryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await libraryBtn.click();
       await page.waitForTimeout(500);
+      await dismissPopups(page);
     }
 
     // Click on the technology name
@@ -72,6 +81,7 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
     if (await techBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await techBtn.click();
       await page.waitForTimeout(500);
+      await dismissPopups(page);
       console.log(`Started research: ${techName}`);
       return true;
     } else {
@@ -84,6 +94,9 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
 }
 
 export async function clickFreeFinishButtons(page: Page): Promise<number> {
+  // Dismiss popups before action
+  await dismissPopups(page);
+
   // Find and click all free finish buttons (instant complete for short builds)
   const freeFinishBtns = page.locator('.icon-build-finish-free-2').locator('..');
   const count = await freeFinishBtns.count();
@@ -92,6 +105,7 @@ export async function clickFreeFinishButtons(page: Page): Promise<number> {
     console.log(`Found ${count} free finish button(s), clicking...`);
     for (let i = 0; i < count; i++) {
       try {
+        await dismissPopups(page);
         const btn = freeFinishBtns.nth(i);
         if (await btn.isVisible()) {
           if (config.dryRun) {

@@ -6,7 +6,6 @@ import {
   technologyToJSON,
   CastleSolverServiceClient,
 } from './generated/proto/config.js';
-import { config } from './config.js';
 import { dismissPopups } from './browser/popups.js';
 import { navigateToBuildingsView } from './browser/navigation.js';
 import { login } from './browser/login.js';
@@ -18,23 +17,17 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
   // Dismiss any popups first
   await dismissPopups(page);
 
-  // Ensure we're logged in and on buildings view
+  // Ensure we're logged in
   const loggedIn = await login(page);
   if (!loggedIn) {
     throw new Error('Failed to login');
   }
 
-  // Dismiss popups again after login
-  await dismissPopups(page);
-
-  // Navigate to buildings view
+  // Navigate to buildings view (handles popups and checks if already there)
   const onBuildings = await navigateToBuildingsView(page);
   if (!onBuildings) {
     throw new Error('Failed to navigate to buildings view');
   }
-
-  // Dismiss any popups that appeared
-  await dismissPopups(page);
 
   // Read all castles with resources and buildings
   const castles = await getCastles(page);
