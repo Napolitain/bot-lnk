@@ -401,38 +401,41 @@ async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): 
   // Click any free finish buttons before performing actions
   await clickFreeFinishButtons(page);
 
-  // For each castle, get next action from solver and execute if possible
-  let upgraded = false;
-  for (let ci = 0; ci < castles.length && !upgraded; ci++) {
+  // For each castle, try to upgrade one building (each castle has its own queue)
+  let totalUpgrades = 0;
+  for (let ci = 0; ci < castles.length; ci++) {
     const castle = castles[ci];
 
     // Try to get next action from solver
     const nextAction = await getNextActionForCastle(solverClient, castle);
 
+    let upgraded = false;
     if (nextAction && castle.buildingCanUpgrade.get(nextAction.buildingType)) {
       console.log(`\nSolver recommends: ${buildingTypeToJSON(nextAction.buildingType)} Lv ${nextAction.fromLevel} → ${nextAction.toLevel} for ${castle.name}`);
       upgraded = await upgradeBuilding(page, ci, nextAction.buildingType);
     } else if (nextAction) {
-      console.log(`\nSolver recommends ${buildingTypeToJSON(nextAction.buildingType)} but cannot upgrade yet (waiting for resources)`);
+      console.log(`\n[${castle.name}] Solver recommends ${buildingTypeToJSON(nextAction.buildingType)} but cannot upgrade yet (waiting for resources)`);
     }
-  }
 
-  if (!upgraded) {
-    // Fallback: try to upgrade any available building
-    for (let ci = 0; ci < castles.length && !upgraded; ci++) {
-      for (const [buildingType, canUpgrade] of castles[ci].buildingCanUpgrade) {
+    // Fallback: try to upgrade any available building for this castle
+    if (!upgraded) {
+      for (const [buildingType, canUpgrade] of castle.buildingCanUpgrade) {
         if (canUpgrade) {
-          console.log(`\nFallback: Upgrading ${buildingTypeToJSON(buildingType)} in ${castles[ci].name}...`);
+          console.log(`\n[${castle.name}] Fallback: Upgrading ${buildingTypeToJSON(buildingType)}...`);
           upgraded = await upgradeBuilding(page, ci, buildingType);
           if (upgraded) break;
         }
       }
     }
+
+    if (upgraded) {
+      totalUpgrades++;
+    } else {
+      console.log(`\n[${castle.name}] No buildings available to upgrade.`);
+    }
   }
 
-  if (!upgraded) {
-    console.log('\nNo buildings available to upgrade.');
-  }
+  console.log(`\nTotal upgrades this cycle: ${totalUpgrades}/${castles.length} castles`);
 }
 
 async function main() {
