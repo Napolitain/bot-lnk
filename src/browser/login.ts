@@ -29,7 +29,7 @@ async function isInGame(page: Page): Promise<boolean> {
   }
 }
 
-async function waitForGameLoad(page: Page, timeoutMs = 10000): Promise<boolean> {
+async function waitForGameLoad(page: Page, timeoutMs = 20000): Promise<boolean> {
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
     await dismissPopups(page);
