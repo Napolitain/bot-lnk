@@ -2,13 +2,17 @@
   "name": "bot-lnk",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
-  "scripts": {},
+  "main": "bot.ts",
+  "scripts": {
+    "start": "npx tsx bot.ts"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "@types/node": "^25.0.3"
+    "@types/node": "^25.0.3",
+    "playwright": "^1.57.0",
+    "tsx": "^4.21.0"
   }
 }
