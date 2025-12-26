@@ -14,8 +14,9 @@ async function isLoggedIn(page: Page): Promise<boolean> {
 
 async function isOnLoginPage(page: Page): Promise<boolean> {
   try {
-    const emailField = page.getByRole('textbox', { name: 'Email' });
-    return await emailField.isVisible({ timeout: 3000 });
+    // Check for login form specifically
+    const loginForm = page.locator('form.form--login');
+    return await loginForm.isVisible({ timeout: 3000 });
   } catch {
     return false;
   }
@@ -72,23 +73,7 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
     return await isLoggedIn(page);
   }
 
-  // Check if "PLAY NOW" button is visible (already logged in from previous session)
-  if (await isOnPlayNow(page)) {
-    console.log('Found PLAY NOW button, clicking...');
-    await page.getByText('PLAY NOW').click();
-    await page.waitForTimeout(2000);
-    await dismissPopups(page);
-
-    // After PLAY NOW, we should be on server select
-    if (await isOnServerSelect(page)) {
-      await page.getByText(config.server).click();
-      await page.waitForTimeout(3000);
-      await dismissPopups(page);
-    }
-    return await isLoggedIn(page);
-  }
-
-  // Check if on login page
+  // Check if on login page FIRST (priority over PLAY NOW)
   if (await isOnLoginPage(page)) {
     console.log('On login page, logging in...');
 
@@ -117,6 +102,22 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
 
     await dismissPopups(page);
     console.log('Login completed!');
+    return await isLoggedIn(page);
+  }
+
+  // Check if "PLAY NOW" button is visible (no login form, already have session)
+  if (await isOnPlayNow(page)) {
+    console.log('Found PLAY NOW button, clicking...');
+    await page.getByText('PLAY NOW').click();
+    await page.waitForTimeout(2000);
+    await dismissPopups(page);
+
+    // After PLAY NOW, we should be on server select
+    if (await isOnServerSelect(page)) {
+      await page.getByText(config.server).click();
+      await page.waitForTimeout(3000);
+      await dismissPopups(page);
+    }
     return await isLoggedIn(page);
   }
 
