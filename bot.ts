@@ -1,9 +1,14 @@
-import { chromium, Page } from 'playwright';
+import { chromium, Page, BrowserContext } from 'playwright';
 import 'dotenv/config';
 import { createChannel, createClient } from 'nice-grpc';
+import * as path from 'path';
+import * as os from 'os';
 
 // Dry run mode - prints actions instead of clicking
 const DRY_RUN = process.env.DRY_RUN === 'true';
+
+// Persistent session directory
+const USER_DATA_DIR = process.env.USER_DATA_DIR || path.join(os.homedir(), '.bot-lnk-session');
 import {
   BuildingType,
   ResourceType,
@@ -65,9 +70,18 @@ interface CastleState {
   buildingCanUpgrade: Map<BuildingType, boolean>;
 }
 
-async function navigateToBuildingsView(page: Page) {
-  await page.getByRole('button', { name: 'Current building upgrades' }).click();
-  await page.waitForTimeout(1000);
+async function navigateToBuildingsView(page: Page): Promise<boolean> {
+  try {
+    const buildingsBtn = page.getByRole('button', { name: 'Current building upgrades' });
+    if (await buildingsBtn.isVisible({ timeout: 5000 })) {
+      await buildingsBtn.click();
+      await page.waitForTimeout(1000);
+      return true;
+    }
+  } catch {
+    // Button not found
+  }
+  return false;
 }
 
 async function getCastles(page: Page): Promise<CastleState[]> {
@@ -177,8 +191,37 @@ async function upgradeBuilding(page: Page, castleIndex: number, buildingType: Bu
   return false;
 }
 
-async function login(page: Page) {
-  console.log('Logging in...');
+async function isLoggedIn(page: Page): Promise<boolean> {
+  // Check if we're already in the game (buildings button visible)
+  try {
+    const buildingsBtn = page.getByRole('button', { name: 'Current building upgrades' });
+    return await buildingsBtn.isVisible({ timeout: 3000 });
+  } catch {
+    return false;
+  }
+}
+
+async function isOnLoginPage(page: Page): Promise<boolean> {
+  try {
+    const emailField = page.getByRole('textbox', { name: 'Email' });
+    return await emailField.isVisible({ timeout: 3000 });
+  } catch {
+    return false;
+  }
+}
+
+async function isOnServerSelect(page: Page): Promise<boolean> {
+  const server = process.env.SERVER || '';
+  try {
+    const serverBtn = page.getByText(server);
+    return await serverBtn.isVisible({ timeout: 3000 });
+  } catch {
+    return false;
+  }
+}
+
+async function login(page: Page): Promise<boolean> {
+  console.log('Checking login state...');
   
   const email = process.env.EMAIL;
   const password = process.env.PASSWORD;
@@ -187,30 +230,63 @@ async function login(page: Page) {
   if (!email || !password || !server) {
     throw new Error('Missing EMAIL, PASSWORD, or SERVER in .env file');
   }
-  
-  await page.goto('https://lordsandknights.com/');
-  
-  // Fill login form
-  await page.getByRole('textbox', { name: 'Email' }).click();
-  await page.getByRole('textbox', { name: 'Email' }).fill(email);
-  await page.getByRole('textbox', { name: 'Password' }).click();
-  await page.getByRole('textbox', { name: 'Password' }).fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  
-  // Handle OK dialog if it appears
-  const okButton = page.getByRole('button', { name: 'OK' });
-  if (await okButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await okButton.click();
-    await page.getByRole('button', { name: 'Log in' }).click();
+
+  // Navigate to game if not already there
+  const currentUrl = page.url();
+  if (!currentUrl.includes('lordsandknights.com')) {
+    await page.goto('https://lordsandknights.com/');
+    await page.waitForTimeout(2000);
   }
-  
-  // Select server
-  await page.getByText(server).click();
-  
-  console.log('Logged in successfully!');
-  
-  // Wait for game to load
-  await page.waitForTimeout(3000);
+
+  // Check if already logged in
+  if (await isLoggedIn(page)) {
+    console.log('Already logged in!');
+    return true;
+  }
+
+  // Check if on server select screen
+  if (await isOnServerSelect(page)) {
+    console.log('On server select, choosing server...');
+    await page.getByText(server).click();
+    await page.waitForTimeout(3000);
+    return await isLoggedIn(page);
+  }
+
+  // Check if on login page
+  if (await isOnLoginPage(page)) {
+    console.log('On login page, logging in...');
+    
+    // Fill login form
+    await page.getByRole('textbox', { name: 'Email' }).click();
+    await page.getByRole('textbox', { name: 'Email' }).fill(email);
+    await page.getByRole('textbox', { name: 'Password' }).click();
+    await page.getByRole('textbox', { name: 'Password' }).fill(password);
+    await page.getByRole('button', { name: 'Log in' }).click();
+    
+    await page.waitForTimeout(2000);
+
+    // Handle OK dialog if it appears
+    const okButton = page.getByRole('button', { name: 'OK' });
+    if (await okButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await okButton.click();
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await page.waitForTimeout(2000);
+    }
+    
+    // Select server if visible
+    if (await isOnServerSelect(page)) {
+      await page.getByText(server).click();
+      await page.waitForTimeout(3000);
+    }
+    
+    console.log('Login completed!');
+    return await isLoggedIn(page);
+  }
+
+  console.log('Unknown page state, navigating to login...');
+  await page.goto('https://lordsandknights.com/');
+  await page.waitForTimeout(2000);
+  return await login(page); // Retry
 }
 
 // Default target levels (same as solver defaults)
@@ -254,83 +330,95 @@ async function getNextActionForCastle(
   }
 }
 
-async function main() {
-  // Launch browser with persistent context to reuse login session
-  const browser = await chromium.launch({ headless: false });
-  const context = await browser.newContext({
-    viewport: { width: 1920, height: 1080 }
-  });
-  const page = await context.newPage();
-
-  await login(page);
+async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<void> {
+  // Ensure we're logged in and on buildings view
+  const loggedIn = await login(page);
+  if (!loggedIn) {
+    throw new Error('Failed to login');
+  }
 
   // Navigate to buildings view
-  await navigateToBuildingsView(page);
+  const onBuildings = await navigateToBuildingsView(page);
+  if (!onBuildings) {
+    throw new Error('Failed to navigate to buildings view');
+  }
+
+  // Read all castles with resources and buildings
+  const castles = await getCastles(page);
+
+  console.log('\n=== Castle Status ===');
+  for (const castle of castles) {
+    const wood = castle.config.resources.find(r => r.type === ResourceType.WOOD)?.amount || 0;
+    const stone = castle.config.resources.find(r => r.type === ResourceType.STONE)?.amount || 0;
+    const iron = castle.config.resources.find(r => r.type === ResourceType.IRON)?.amount || 0;
+    const food = castle.config.resources.find(r => r.type === ResourceType.FOOD)?.amount || 0;
+
+    console.log(`\n${castle.name}:`);
+    console.log(`  Resources: Wood=${wood}, Stone=${stone}, Iron=${iron}, Food=${food}`);
+    console.log(`  Buildings:`);
+    for (const bl of castle.config.buildingLevels) {
+      const canUpgrade = castle.buildingCanUpgrade.get(bl.type) ? '[CAN UPGRADE]' : '';
+      console.log(`    - ${buildingTypeToJSON(bl.type)}: Lv ${bl.level} ${canUpgrade}`);
+    }
+  }
+
+  // For each castle, get next action from solver and execute if possible
+  let upgraded = false;
+  for (let ci = 0; ci < castles.length && !upgraded; ci++) {
+    const castle = castles[ci];
+
+    // Try to get next action from solver
+    const nextAction = await getNextActionForCastle(solverClient, castle);
+
+    if (nextAction && castle.buildingCanUpgrade.get(nextAction.buildingType)) {
+      console.log(`\nSolver recommends: ${buildingTypeToJSON(nextAction.buildingType)} Lv ${nextAction.fromLevel} → ${nextAction.toLevel} for ${castle.name}`);
+      upgraded = await upgradeBuilding(page, ci, nextAction.buildingType);
+    } else if (nextAction) {
+      console.log(`\nSolver recommends ${buildingTypeToJSON(nextAction.buildingType)} but cannot upgrade yet (waiting for resources)`);
+    }
+  }
+
+  if (!upgraded) {
+    // Fallback: try to upgrade any available building
+    for (let ci = 0; ci < castles.length && !upgraded; ci++) {
+      for (const [buildingType, canUpgrade] of castles[ci].buildingCanUpgrade) {
+        if (canUpgrade) {
+          console.log(`\nFallback: Upgrading ${buildingTypeToJSON(buildingType)} in ${castles[ci].name}...`);
+          upgraded = await upgradeBuilding(page, ci, buildingType);
+          if (upgraded) break;
+        }
+      }
+    }
+  }
+
+  if (!upgraded) {
+    console.log('\nNo buildings available to upgrade.');
+  }
+}
+
+async function main() {
+  // Launch browser with persistent context to reuse login session
+  console.log(`Using persistent session at: ${USER_DATA_DIR}`);
+  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
+    headless: false,
+    viewport: { width: 1920, height: 1080 },
+  });
+
+  const page = context.pages()[0] || await context.newPage();
 
   // Create gRPC client
   const solverClient = createSolverClient();
 
   console.log(`Starting bot...${DRY_RUN ? ' [DRY RUN MODE]' : ''}`);
 
-  // Main bot loop - run once in dry run mode
-  const maxIterations = DRY_RUN ? 1 : Infinity;
-
   // Main bot loop
-  let iteration = 0;
-  while (iteration < maxIterations) {
-    iteration++;
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_ERRORS = 3;
+
+  while (true) {
     try {
-      // Read all castles with resources and buildings
-      const castles = await getCastles(page);
-
-      console.log('\n=== Castle Status ===');
-      for (const castle of castles) {
-        const wood = castle.config.resources.find(r => r.type === ResourceType.WOOD)?.amount || 0;
-        const stone = castle.config.resources.find(r => r.type === ResourceType.STONE)?.amount || 0;
-        const iron = castle.config.resources.find(r => r.type === ResourceType.IRON)?.amount || 0;
-        const food = castle.config.resources.find(r => r.type === ResourceType.FOOD)?.amount || 0;
-
-        console.log(`\n${castle.name}:`);
-        console.log(`  Resources: Wood=${wood}, Stone=${stone}, Iron=${iron}, Food=${food}`);
-        console.log(`  Buildings:`);
-        for (const bl of castle.config.buildingLevels) {
-          const canUpgrade = castle.buildingCanUpgrade.get(bl.type) ? '[CAN UPGRADE]' : '';
-          console.log(`    - ${buildingTypeToJSON(bl.type)}: Lv ${bl.level} ${canUpgrade}`);
-        }
-      }
-
-      // For each castle, get next action from solver and execute if possible
-      let upgraded = false;
-      for (let ci = 0; ci < castles.length && !upgraded; ci++) {
-        const castle = castles[ci];
-
-        // Try to get next action from solver
-        const nextAction = await getNextActionForCastle(solverClient, castle);
-
-        if (nextAction && castle.buildingCanUpgrade.get(nextAction.buildingType)) {
-          console.log(`\nSolver recommends: ${buildingTypeToJSON(nextAction.buildingType)} Lv ${nextAction.fromLevel} → ${nextAction.toLevel} for ${castle.name}`);
-          upgraded = await upgradeBuilding(page, ci, nextAction.buildingType);
-        } else if (nextAction) {
-          console.log(`\nSolver recommends ${buildingTypeToJSON(nextAction.buildingType)} but cannot upgrade yet (waiting for resources)`);
-        }
-      }
-
-      if (!upgraded) {
-        // Fallback: try to upgrade any available building
-        for (let ci = 0; ci < castles.length && !upgraded; ci++) {
-          for (const [buildingType, canUpgrade] of castles[ci].buildingCanUpgrade) {
-            if (canUpgrade) {
-              console.log(`\nFallback: Upgrading ${buildingTypeToJSON(buildingType)} in ${castles[ci].name}...`);
-              upgraded = await upgradeBuilding(page, ci, buildingType);
-              if (upgraded) break;
-            }
-          }
-        }
-      }
-
-      if (!upgraded) {
-        console.log('\nNo buildings available to upgrade.');
-      }
+      await runBotLoop(page, solverClient);
+      consecutiveErrors = 0; // Reset on success
 
       // In dry run mode, exit after one iteration
       if (DRY_RUN) {
@@ -343,10 +431,29 @@ async function main() {
       await page.waitForTimeout(30000);
 
     } catch (e) {
-      console.error('Error in bot loop:', e);
-      await page.waitForTimeout(5000);
+      consecutiveErrors++;
+      console.error(`\nError in bot loop (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, e);
+
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.log('\nToo many consecutive errors. Waiting 1 minute before retry...');
+        await page.waitForTimeout(60000);
+        consecutiveErrors = 0; // Reset after long wait
+        
+        // Try to recover by navigating to home
+        try {
+          await page.goto('https://lordsandknights.com/');
+          await page.waitForTimeout(3000);
+        } catch {
+          console.error('Failed to navigate to home page');
+        }
+      } else {
+        console.log('\nRetrying in 5 seconds...');
+        await page.waitForTimeout(5000);
+      }
     }
   }
+
+  await context.close();
 }
 
 main().catch(console.error);
