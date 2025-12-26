@@ -12,13 +12,16 @@ const USER_DATA_DIR = process.env.USER_DATA_DIR || path.join(os.homedir(), '.bot
 import {
   BuildingType,
   ResourceType,
+  Technology,
   CastleConfig,
   SolveRequest,
   SolveResponse,
   BuildingAction,
+  ResearchAction,
   CastleSolverServiceDefinition,
   CastleSolverServiceClient,
   buildingTypeToJSON,
+  technologyToJSON,
 } from './src/generated/proto/config';
 
 // Map DOM building names to proto BuildingType
@@ -62,6 +65,20 @@ const BUILDING_TYPE_TO_INDEX: Record<BuildingType, number> = {
   [BuildingType.ORE_STORE]: 12,
   [BuildingType.BUILDING_UNKNOWN]: -1,
   [BuildingType.UNRECOGNIZED]: -1,
+};
+
+// Map Technology enum to display name for clicking
+const TECHNOLOGY_TO_NAME: Record<Technology, string> = {
+  [Technology.LONGBOW]: 'Longbow',
+  [Technology.CROP_ROTATION]: 'Crop rotation',
+  [Technology.YOKE]: 'Yoke',
+  [Technology.CELLAR_STOREROOM]: 'Cellar storeroom',
+  [Technology.STIRRUP]: 'Stirrup',
+  [Technology.CROSSBOW]: 'Crossbow',
+  [Technology.SWORDSMITH]: 'Swordsmith',
+  [Technology.HORSE_ARMOUR]: 'Horse armour',
+  [Technology.TECH_UNKNOWN]: '',
+  [Technology.UNRECOGNIZED]: '',
 };
 
 interface CastleState {
@@ -188,6 +205,42 @@ async function upgradeBuilding(page: Page, castleIndex: number, buildingType: Bu
     }
   } catch (e) {
     console.log(`Failed to upgrade:`, e);
+  }
+  return false;
+}
+
+async function researchTechnology(page: Page, technology: Technology): Promise<boolean> {
+  const techName = TECHNOLOGY_TO_NAME[technology];
+  if (!techName) {
+    console.log(`Unknown technology: ${technology}`);
+    return false;
+  }
+
+  try {
+    if (DRY_RUN) {
+      console.log(`[DRY RUN] Would research ${techName}`);
+      return true;
+    }
+
+    // Click on Library button to open research menu
+    const libraryBtn = page.getByRole('button', { name: 'Library' });
+    if (await libraryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await libraryBtn.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Click on the technology name
+    const techBtn = page.getByText(techName, { exact: true });
+    if (await techBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await techBtn.click();
+      await page.waitForTimeout(500);
+      console.log(`Started research: ${techName}`);
+      return true;
+    } else {
+      console.log(`Technology ${techName} not visible (may already be researched or not available)`);
+    }
+  } catch (e) {
+    console.log(`Failed to research ${techName}:`, e);
   }
   return false;
 }
@@ -320,10 +373,15 @@ function createSolverClient(): CastleSolverServiceClient {
   return createClient(CastleSolverServiceDefinition, channel);
 }
 
-async function getNextActionForCastle(
+interface SolverActions {
+  nextAction?: BuildingAction;
+  nextResearchAction?: ResearchAction;
+}
+
+async function getNextActionsForCastle(
   client: CastleSolverServiceClient,
   castle: CastleState
-): Promise<BuildingAction | undefined> {
+): Promise<SolverActions> {
   const request: SolveRequest = {
     castleConfig: castle.config,
     targetLevels: { targets: DEFAULT_TARGETS },
@@ -331,10 +389,13 @@ async function getNextActionForCastle(
 
   try {
     const response = await client.solve(request);
-    return response.nextAction;
+    return {
+      nextAction: response.nextAction,
+      nextResearchAction: response.nextResearchAction,
+    };
   } catch (e) {
     console.error(`Failed to get next action for ${castle.name}:`, e);
-    return undefined;
+    return {};
   }
 }
 
@@ -401,13 +462,23 @@ async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): 
   // Click any free finish buttons before performing actions
   await clickFreeFinishButtons(page);
 
+  // Check if there's research to do (shared across all castles - one research queue)
+  // We only need to check once since research queue is global
+  if (castles.length > 0) {
+    const { nextResearchAction } = await getNextActionsForCastle(solverClient, castles[0]);
+    if (nextResearchAction && nextResearchAction.technology !== Technology.TECH_UNKNOWN) {
+      console.log(`\nSolver recommends research: ${technologyToJSON(nextResearchAction.technology)}`);
+      await researchTechnology(page, nextResearchAction.technology);
+    }
+  }
+
   // For each castle, try to upgrade one building (each castle has its own queue)
   let totalUpgrades = 0;
   for (let ci = 0; ci < castles.length; ci++) {
     const castle = castles[ci];
 
     // Try to get next action from solver
-    const nextAction = await getNextActionForCastle(solverClient, castle);
+    const { nextAction } = await getNextActionsForCastle(solverClient, castle);
 
     let upgraded = false;
     if (nextAction && castle.buildingCanUpgrade.get(nextAction.buildingType)) {
