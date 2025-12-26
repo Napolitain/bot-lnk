@@ -379,9 +379,6 @@ async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): 
     throw new Error('Failed to navigate to buildings view');
   }
 
-  // Click any free finish buttons first
-  await clickFreeFinishButtons(page);
-
   // Read all castles with resources and buildings
   const castles = await getCastles(page);
 
@@ -400,6 +397,9 @@ async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): 
       console.log(`    - ${buildingTypeToJSON(bl.type)}: Lv ${bl.level} ${canUpgrade}`);
     }
   }
+
+  // Click any free finish buttons before performing actions
+  await clickFreeFinishButtons(page);
 
   // For each castle, get next action from solver and execute if possible
   let upgraded = false;
