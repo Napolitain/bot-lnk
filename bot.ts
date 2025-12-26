@@ -463,11 +463,19 @@ async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): 
   await clickFreeFinishButtons(page);
 
   // Check if there's research to do (shared across all castles - one research queue)
-  // We only need to check once since research queue is global
+  // Research should be done if its start time is before the next building action
   if (castles.length > 0) {
-    const { nextResearchAction } = await getNextActionsForCastle(solverClient, castles[0]);
-    if (nextResearchAction && nextResearchAction.technology !== Technology.TECH_UNKNOWN) {
-      console.log(`\nSolver recommends research: ${technologyToJSON(nextResearchAction.technology)}`);
+    const { nextAction, nextResearchAction } = await getNextActionsForCastle(solverClient, castles[0]);
+    
+    // Do research if:
+    // 1. There's a research action AND
+    // 2. Either no building action, OR research starts before/at same time as building
+    const shouldResearch = nextResearchAction && 
+      nextResearchAction.technology !== Technology.TECH_UNKNOWN &&
+      (!nextAction || nextResearchAction.startTimeSeconds <= nextAction.startTimeSeconds);
+    
+    if (shouldResearch && nextResearchAction) {
+      console.log(`\nSolver recommends research first: ${technologyToJSON(nextResearchAction.technology)}`);
       await researchTechnology(page, nextResearchAction.technology);
     }
   }
