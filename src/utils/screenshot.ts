@@ -9,7 +9,7 @@ export async function saveScreenshot(page: Page, prefix: string): Promise<string
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const screenshotDir = path.join(config.userDataDir, 'error-screenshots');
     fs.mkdirSync(screenshotDir, { recursive: true });
-    const screenshotPath = path.join(screenshotDir, `${prefix}-${timestamp}.png`);
+    const screenshotPath = path.join(screenshotDir, `${timestamp}-${prefix}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`[Screenshot] Saved: ${screenshotPath}`);
     return screenshotPath;
