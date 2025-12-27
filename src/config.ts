@@ -9,6 +9,9 @@ export const config = {
   // Headless mode - run browser without visible window
   headless: process.env.HEADLESS === 'true',
 
+  // Block media routes (images, fonts, media) for RAM savings
+  blockMedia: process.env.BLOCK_MEDIA === 'true',
+
   // Persistent session directory
   userDataDir: process.env.USER_DATA_DIR || path.join(os.homedir(), '.bot-lnk-session'),
 
