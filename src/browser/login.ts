@@ -6,21 +6,27 @@ import { saveDebugContext, pollUntil } from '../utils/index.js';
 async function isInGame(page: Page): Promise<boolean> {
   // Check multiple indicators that we're in the game - use short timeouts for polling
   try {
-    // Check for buildings button
-    const buildingsBtn = page.getByRole('button', { name: 'Current building upgrades' });
-    if (await buildingsBtn.isVisible({ timeout: 500 }).catch(() => false)) {
-      return true;
+    // Make sure we're NOT on login page first
+    const loginScene = page.locator('.login-scene');
+    if (await loginScene.isVisible({ timeout: 300 }).catch(() => false)) {
+      return false; // Still on login page
     }
 
-    // Check for game top bar (player name, resources, etc.)
-    const gameBar = page.locator('#game-bar-top');
-    if (await gameBar.isVisible({ timeout: 500 }).catch(() => false)) {
+    // Check for buildings button (most reliable indicator)
+    const buildingsBtn = page.getByRole('button', { name: 'Current building upgrades' });
+    if (await buildingsBtn.isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
 
     // Check for castle button
     const castleBtn = page.getByRole('button', { name: 'Castle' });
     if (await castleBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+      return true;
+    }
+
+    // Check for resource bar (has actual content when in game)
+    const resourceBar = page.locator('.resource-bar');
+    if (await resourceBar.isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
 
@@ -164,11 +170,24 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
     console.log('[Login] Found PLAY NOW button, clicking...');
     try {
       await page.getByText('PLAY NOW').click();
-      await page.waitForTimeout(3000);
-      await dismissPopups(page);
+      
+      // Wait for server select or game load with polling
+      const serverOrGame = await pollUntil(
+        async () => {
+          await dismissPopups(page);
+          if (await isInGame(page)) return 'game';
+          if (await isOnServerSelect(page)) return 'server';
+          return null;
+        },
+        { timeout: 15000, interval: 1000, description: 'server select or game' }
+      );
 
-      // After PLAY NOW, we should be on server select
-      if (await isOnServerSelect(page)) {
+      if (serverOrGame === 'game') {
+        console.log('[Login] Already in game after PLAY NOW');
+        return true;
+      }
+
+      if (serverOrGame === 'server') {
         console.log('[Login] Selecting server...');
         await page.getByText(config.server).click();
       }
