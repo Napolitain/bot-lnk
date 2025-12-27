@@ -3,6 +3,7 @@ import {
   BuildingType,
   BuildingAction,
   ResearchAction,
+  UnitsRecommendation,
   SolveRequest,
   CastleSolverServiceDefinition,
   CastleSolverServiceClient,
@@ -30,6 +31,7 @@ export const DEFAULT_TARGETS = [
 export interface SolverActions {
   nextAction?: BuildingAction;
   nextResearchAction?: ResearchAction;
+  unitsRecommendation?: UnitsRecommendation;
 }
 
 export function createSolverClient(): CastleSolverServiceClient {
@@ -51,6 +53,7 @@ export async function getNextActionsForCastle(
     return {
       nextAction: response.nextAction,
       nextResearchAction: response.nextResearchAction,
+      unitsRecommendation: response.unitsRecommendation,
     };
   } catch (e) {
     console.error(`Failed to get next action for ${castle.name}:`, e);

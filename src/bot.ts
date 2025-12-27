@@ -4,7 +4,9 @@ import {
   Technology,
   buildingTypeToJSON,
   technologyToJSON,
+  unitTypeToJSON,
   CastleSolverServiceClient,
+  UnitsRecommendation,
 } from './generated/proto/config.js';
 import { dismissPopups } from './browser/popups.js';
 import { navigateToBuildingsView } from './browser/navigation.js';
@@ -12,6 +14,22 @@ import { login } from './browser/login.js';
 import { upgradeBuilding, researchTechnology, clickFreeFinishButtons } from './browser/actions.js';
 import { getCastles } from './game/castle.js';
 import { getNextActionsForCastle } from './client/solver.js';
+
+/** Print units recommendation to console */
+function printUnitsRecommendation(castleName: string, rec: UnitsRecommendation): void {
+  console.log(`\n=== ${castleName}: BUILD ORDER COMPLETE ===`);
+  console.log(`Recommended Army Composition:`);
+  console.log(`  Food: ${rec.totalFood}`);
+  console.log(`  Trading throughput: ${rec.totalThroughput?.toFixed(0)} resources/hour`);
+  console.log(`  Silver income: ${rec.silverPerHour?.toFixed(2)}/hour`);
+  console.log(`  Defense vs Cavalry: ${rec.defenseVsCavalry}`);
+  console.log(`  Defense vs Infantry: ${rec.defenseVsInfantry}`);
+  console.log(`  Defense vs Artillery: ${rec.defenseVsArtillery}`);
+  console.log(`  Units:`);
+  for (const uc of rec.unitCounts) {
+    console.log(`    - ${unitTypeToJSON(uc.type)}: ${uc.count}`);
+  }
+}
 
 export async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<number | null> {
   // Reload page to get fresh resource values
@@ -98,7 +116,13 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
     }
 
     // Try to get next action from solver
-    const { nextAction } = await getNextActionsForCastle(solverClient, castle);
+    const { nextAction, unitsRecommendation } = await getNextActionsForCastle(solverClient, castle);
+
+    // Check if build order is complete for this castle
+    if (unitsRecommendation?.buildOrderComplete) {
+      printUnitsRecommendation(castle.name, unitsRecommendation);
+      continue;
+    }
 
     let upgraded = false;
     if (nextAction && castle.buildingCanUpgrade.get(nextAction.buildingType)) {
