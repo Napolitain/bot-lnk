@@ -4,11 +4,12 @@ import { dismissPopups } from '../browser/popups.js';
 import { navigateToBuildingsView, navigateToRecruitmentView, navigateToTradingView } from '../browser/navigation.js';
 import { login } from '../browser/login.js';
 import { researchTechnology, clickFreeFinishButtons } from '../browser/actions.js';
+import { checkPageHealth, waitForHealthyPage } from '../browser/health.js';
 import { getCastles, CastleState } from '../game/castle.js';
 import { getUnits, CastleUnits } from '../game/units.js';
 import { getNextActionsForCastle } from '../client/solver.js';
 import { config } from '../config.js';
-import { LoginError, NavigationError } from '../errors/index.js';
+import { LoginError, NavigationError, BotError } from '../errors/index.js';
 import { CastlePhase, determineCastlePhase } from '../domain/index.js';
 import { handleBuildingPhase, handleRecruitingPhase, handleTradingPhase } from './phases/index.js';
 import { printCastleStatus, printUnitsRecommendation, printUnitComparison, printCycleSummary, printSleepInfo } from './display.js';
@@ -47,6 +48,18 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(2000);
 
+  // Initial health check
+  const initialHealth = await checkPageHealth(page);
+  if (!initialHealth.healthy) {
+    console.warn(`[Health] Initial check failed: ${initialHealth.issues.join(', ')}`);
+    // Try to dismiss popups and check again
+    await dismissPopups(page);
+    const retryHealth = await waitForHealthyPage(page);
+    if (!retryHealth.healthy) {
+      throw new BotError(`Page unhealthy after retry: ${retryHealth.issues.join(', ')}`);
+    }
+  }
+
   // Dismiss any popups first
   await dismissPopups(page);
 
@@ -60,6 +73,12 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
   const onBuildings = await navigateToBuildingsView(page);
   if (!onBuildings) {
     throw new NavigationError('buildings');
+  }
+
+  // Health check after navigation
+  const buildingsHealth = await waitForHealthyPage(page, 'buildings');
+  if (!buildingsHealth.healthy) {
+    console.warn(`[Health] Buildings view unhealthy: ${buildingsHealth.issues.join(', ')}`);
   }
 
   // Read all castles
@@ -109,6 +128,13 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
 
   if (needsRecruitmentCheck) {
     await navigateToRecruitmentView(page);
+    
+    // Health check after navigation
+    const recruitHealth = await waitForHealthyPage(page, 'recruitment');
+    if (!recruitHealth.healthy) {
+      console.warn(`[Health] Recruitment view unhealthy: ${recruitHealth.issues.join(', ')}`);
+    }
+    
     allCastleUnits = await getUnits(page);
 
     // Re-determine phases with actual unit counts
@@ -165,6 +191,12 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
   const tradingCastles = castlePhases.filter(cp => cp.phase === CastlePhase.TRADING);
   if (tradingCastles.length > 0) {
     await navigateToTradingView(page);
+    
+    // Health check after navigation
+    const tradingHealth = await waitForHealthyPage(page, 'trading');
+    if (!tradingHealth.healthy) {
+      console.warn(`[Health] Trading view unhealthy: ${tradingHealth.issues.join(', ')}`);
+    }
 
     for (const cp of tradingCastles) {
       if (cp.unitsRec) {

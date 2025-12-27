@@ -9,6 +9,46 @@ import {
 import { config } from '../config.js';
 import { BUILDING_TYPE_TO_INDEX, TECHNOLOGY_TO_NAME, UNIT_TYPE_TO_INDEX } from '../game/mappings.js';
 import { dismissPopups } from './popups.js';
+import { checkPageHealth } from './health.js';
+
+/** Get current upgrade queue count for a castle */
+async function getUpgradeQueueCount(page: Page, castleIndex: number): Promise<number> {
+  try {
+    const castleRows = page.locator('.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)');
+    const row = castleRows.nth(castleIndex);
+    // Count cells that have upgrading status (timer visible)
+    const upgradingCells = row.locator('.tabular-cell--upgrade-building .upgrade-status--timer');
+    return await upgradingCells.count();
+  } catch {
+    return -1;
+  }
+}
+
+/** Get current unit count for a specific unit type in a castle */
+async function getUnitCount(page: Page, castleIndex: number, unitIndex: number): Promise<number> {
+  try {
+    const castleRows = page.locator('.table--global-overview--recruitment .tabular-row:not(.global-overview--table--header)');
+    const row = castleRows.nth(castleIndex);
+    const unitCells = row.locator('.tabular-cell--recruitment');
+    const cell = unitCells.nth(unitIndex);
+    const countDiv = cell.locator('.recruitment--cell .tabular-cell--input-container .centered.last');
+    const countText = await countDiv.textContent() || '0';
+    return parseInt(countText, 10) || 0;
+  } catch {
+    return -1;
+  }
+}
+
+/** Verify page is still healthy after an action */
+async function verifyPostAction(page: Page, actionName: string): Promise<boolean> {
+  await page.waitForTimeout(300);
+  const health = await checkPageHealth(page);
+  if (!health.healthy) {
+    console.error(`[${actionName}] Page unhealthy after action: ${health.issues.join(', ')}`);
+    return false;
+  }
+  return true;
+}
 
 export async function upgradeBuilding(page: Page, castleIndex: number, buildingType: BuildingType): Promise<boolean> {
   const buildingIndex = BUILDING_TYPE_TO_INDEX[buildingType];
@@ -20,6 +60,9 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
   try {
     // Dismiss popups before action
     await dismissPopups(page);
+
+    // Get queue count before action for verification
+    const queueBefore = await getUpgradeQueueCount(page, castleIndex);
 
     const castleRows = page.locator('.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)');
     const row = castleRows.nth(castleIndex);
@@ -43,6 +86,19 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
       const confirmBtn = page.locator('.dialog button.button--action, div:nth-child(2) > .button');
       if (await confirmBtn.count() > 0) {
         await confirmBtn.first().click();
+        await page.waitForTimeout(500);
+      }
+
+      // Verify: page still healthy
+      if (!await verifyPostAction(page, 'upgradeBuilding')) {
+        return false;
+      }
+
+      // Verify: queue count increased (or building started upgrading)
+      const queueAfter = await getUpgradeQueueCount(page, castleIndex);
+      if (queueBefore >= 0 && queueAfter >= 0 && queueAfter <= queueBefore) {
+        console.warn(`[upgradeBuilding] Queue did not increase (${queueBefore} -> ${queueAfter}) - action may have failed`);
+        // Don't return false - the upgrade might have finished instantly or we misread
       }
 
       console.log(`Upgraded ${buildingTypeToJSON(buildingType)} in castle ${castleIndex}`);
@@ -84,6 +140,12 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
       await techBtn.click();
       await page.waitForTimeout(500);
       await dismissPopups(page);
+
+      // Verify page health
+      if (!await verifyPostAction(page, 'researchTechnology')) {
+        return false;
+      }
+
       console.log(`Started research: ${techName}`);
       return true;
     } else {
@@ -103,6 +165,7 @@ export async function clickFreeFinishButtons(page: Page): Promise<number> {
   const freeFinishBtns = page.locator('.icon-build-finish-free-2').locator('..');
   const count = await freeFinishBtns.count();
 
+  let clicked = 0;
   if (count > 0) {
     console.log(`Found ${count} free finish button(s), clicking...`);
     for (let i = 0; i < count; i++) {
@@ -112,10 +175,20 @@ export async function clickFreeFinishButtons(page: Page): Promise<number> {
         if (await btn.isVisible()) {
           if (config.dryRun) {
             console.log(`[DRY RUN] Would click free finish button ${i + 1}`);
+            clicked++;
           } else {
             await btn.click();
             await page.waitForTimeout(500);
+            
+            // Verify page health after each click
+            const health = await checkPageHealth(page);
+            if (!health.healthy) {
+              console.warn(`[freeFinish] Page unhealthy after click ${i + 1}: ${health.issues.join(', ')}`);
+              break;
+            }
+            
             console.log(`Clicked free finish button ${i + 1}`);
+            clicked++;
           }
         }
       } catch (e) {
@@ -124,7 +197,7 @@ export async function clickFreeFinishButtons(page: Page): Promise<number> {
     }
   }
 
-  return count;
+  return clicked;
 }
 
 export async function recruitUnits(page: Page, castleIndex: number, unitType: UnitType, amount: number): Promise<boolean> {
@@ -141,6 +214,9 @@ export async function recruitUnits(page: Page, castleIndex: number, unitType: Un
 
   try {
     await dismissPopups(page);
+
+    // Get unit count before for verification
+    const countBefore = await getUnitCount(page, castleIndex, unitIndex);
 
     const castleRows = page.locator('.table--global-overview--recruitment .tabular-row:not(.global-overview--table--header)');
     const row = castleRows.nth(castleIndex);
@@ -176,6 +252,13 @@ export async function recruitUnits(page: Page, castleIndex: number, unitType: Un
     await recruitBtn.click();
     await page.waitForTimeout(500);
 
+    // Verify page health
+    if (!await verifyPostAction(page, 'recruitUnits')) {
+      return false;
+    }
+
+    // Verify: unit count increased or recruitment queue started
+    // Note: units might be queued, not instantly added, so we just check health
     console.log(`Recruited ${amount}x ${unitTypeToJSON(unitType)} in castle ${castleIndex}`);
     return true;
   } catch (e) {
@@ -208,6 +291,13 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
     await page.waitForTimeout(1000);
     await dismissPopups(page);
 
+    // Verify dialog opened (look for trade dialog elements)
+    const dialogVisible = await page.locator('.menu--content-section').isVisible({ timeout: 2000 }).catch(() => false);
+    if (!dialogVisible) {
+      console.warn(`[executeTrade] Trade dialog did not open for castle ${castleIndex}`);
+      return false;
+    }
+
     // Now we should be in the trade dialog
     // Click "Max" buttons to maximize transport units
     const maxButtons = page.locator('.seek-bar-increase-value--button');
@@ -228,6 +318,12 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
     if (await confirmBtn.count() > 0 && await confirmBtn.isEnabled()) {
       await confirmBtn.click();
       await page.waitForTimeout(500);
+
+      // Verify page health after trade
+      if (!await verifyPostAction(page, 'executeTrade')) {
+        return false;
+      }
+
       console.log(`Executed trade for castle ${castleIndex}`);
       return true;
     } else {
@@ -236,6 +332,11 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
       if (await anyConfirmBtn.count() > 0 && await anyConfirmBtn.isEnabled()) {
         await anyConfirmBtn.click();
         await page.waitForTimeout(500);
+
+        if (!await verifyPostAction(page, 'executeTrade')) {
+          return false;
+        }
+
         console.log(`Executed trade for castle ${castleIndex}`);
         return true;
       }
