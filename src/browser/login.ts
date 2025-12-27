@@ -1,26 +1,26 @@
 import { Page } from 'playwright';
 import { config } from '../config.js';
 import { dismissPopups } from './popups.js';
-import { saveDebugContext } from '../utils/index.js';
+import { saveDebugContext, pollUntil } from '../utils/index.js';
 
 async function isInGame(page: Page): Promise<boolean> {
-  // Check multiple indicators that we're in the game
+  // Check multiple indicators that we're in the game - use short timeouts for polling
   try {
     // Check for buildings button
     const buildingsBtn = page.getByRole('button', { name: 'Current building upgrades' });
-    if (await buildingsBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await buildingsBtn.isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
 
     // Check for game top bar (player name, resources, etc.)
     const gameBar = page.locator('#game-bar-top');
-    if (await gameBar.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await gameBar.isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
 
     // Check for castle button
     const castleBtn = page.getByRole('button', { name: 'Castle' });
-    if (await castleBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    if (await castleBtn.isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
 
@@ -32,15 +32,20 @@ async function isInGame(page: Page): Promise<boolean> {
 
 async function waitForGameLoad(page: Page, timeoutMs = 30000): Promise<boolean> {
   console.log('[Login] Waiting for game to load...');
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeoutMs) {
-    await dismissPopups(page);
-    if (await isInGame(page)) {
-      console.log('[Login] Game loaded successfully');
-      return true;
-    }
-    await page.waitForTimeout(1000);
+  
+  const loaded = await pollUntil(
+    async () => {
+      await dismissPopups(page);
+      return await isInGame(page);
+    },
+    { timeout: timeoutMs, interval: 1000, description: 'game load' }
+  );
+
+  if (loaded) {
+    console.log('[Login] Game loaded successfully');
+    return true;
   }
+
   console.warn(`[Login] Game did not load within ${timeoutMs / 1000}s`);
   await saveDebugContext(page, 'game-load-timeout');
   return false;
@@ -48,9 +53,8 @@ async function waitForGameLoad(page: Page, timeoutMs = 30000): Promise<boolean> 
 
 async function isOnLoginPage(page: Page): Promise<boolean> {
   try {
-    // Check for login form specifically
     const loginForm = page.locator('form.form--login');
-    return await loginForm.isVisible({ timeout: 3000 });
+    return await loginForm.isVisible({ timeout: 500 });
   } catch {
     return false;
   }
@@ -59,7 +63,7 @@ async function isOnLoginPage(page: Page): Promise<boolean> {
 async function isOnPlayNow(page: Page): Promise<boolean> {
   try {
     const playNowBtn = page.getByText('PLAY NOW');
-    return await playNowBtn.isVisible({ timeout: 3000 });
+    return await playNowBtn.isVisible({ timeout: 500 });
   } catch {
     return false;
   }
@@ -68,7 +72,7 @@ async function isOnPlayNow(page: Page): Promise<boolean> {
 async function isOnServerSelect(page: Page): Promise<boolean> {
   try {
     const serverBtn = page.getByText(config.server);
-    return await serverBtn.isVisible({ timeout: 3000 });
+    return await serverBtn.isVisible({ timeout: 500 });
   } catch {
     return false;
   }
