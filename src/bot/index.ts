@@ -1,1 +1,1 @@
-export { runBotLoop } from './loop.js';
+export { runBotLoop, BotLoopResult } from './loop.js';

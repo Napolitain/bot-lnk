@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { config, validateConfig } from './config.js';
 import { runBotLoop } from './bot/index.js';
 import { createSolverClient } from './client/solver.js';
-import { saveDebugContext, formatError } from './utils/index.js';
+import { formatError } from './utils/index.js';
 
 async function main() {
   // Validate config
@@ -58,62 +58,38 @@ async function main() {
 
   console.log(`Starting bot...${config.dryRun ? ' [DRY RUN MODE]' : ''}`);
 
-  // Main bot loop
-  let consecutiveErrors = 0;
-
+  // Main bot loop - NEVER exits unless dry run or context closes
   while (true) {
+    const result = await runBotLoop(page, solverClient);
+
+    if (!result.success) {
+      console.warn(`[Main] Cycle completed with issues: ${result.error || 'unknown'}`);
+    }
+
+    // In dry run mode, exit after one iteration
+    if (config.dryRun) {
+      console.log('\n[DRY RUN] Completed single iteration. Exiting.');
+      break;
+    }
+
+    // Use suggested sleep time if available, otherwise use default interval
+    const sleepMs = result.sleepMs ?? config.loopIntervalMs;
+    console.log(`\nWaiting ${Math.round(sleepMs / 1000)} seconds before next check...`);
+    
     try {
-      const suggestedSleepMs = await runBotLoop(page, solverClient);
-      consecutiveErrors = 0; // Reset on success
-
-      // In dry run mode, exit after one iteration
-      if (config.dryRun) {
-        console.log('\n[DRY RUN] Completed single iteration. Exiting.');
-        break;
-      }
-
-      // Use suggested sleep time if available, otherwise use default interval
-      const sleepMs = suggestedSleepMs ?? config.loopIntervalMs;
-      console.log(`\nWaiting ${Math.round(sleepMs / 1000)} seconds before next check...`);
       await page.waitForTimeout(sleepMs);
-
-    } catch (e) {
-      consecutiveErrors++;
-      const errorMsg = formatError(e);
-      
-      // Save debug context for debugging
-      await saveDebugContext(page, 'bot-loop-error');
-      
-      console.error(`\n[ERROR] Bot loop failed (${consecutiveErrors}/${config.maxConsecutiveErrors})`);
-      console.error(`[ERROR] ${errorMsg}`);
-      console.error(`[ERROR] Page URL: ${page.url()}`);
-
-      if (consecutiveErrors >= config.maxConsecutiveErrors) {
-        console.warn(`\n[WARN] Too many consecutive errors. Waiting ${config.longRetryDelayMs / 1000} seconds before retry...`);
-        await page.waitForTimeout(config.longRetryDelayMs);
-        consecutiveErrors = 0; // Reset after long wait
-
-        // Try to recover by navigating to home
-        try {
-          console.log('[INFO] Attempting recovery - navigating to home page...');
-          await page.goto('https://lordsandknights.com/');
-          await page.waitForTimeout(3000);
-          console.log('[INFO] Recovery navigation completed');
-        } catch (recoveryError) {
-          console.error('[ERROR] Recovery failed:', formatError(recoveryError));
-          await saveDebugContext(page, 'recovery-error');
-        }
-      } else {
-        console.warn(`\n[WARN] Retrying in ${config.retryDelayMs / 1000} seconds...`);
-        await page.waitForTimeout(config.retryDelayMs);
-      }
+    } catch (error) {
+      // Page might be closed, try to recover
+      console.warn('[Main] Sleep interrupted, attempting to continue...');
     }
   }
 
   await context.close();
 }
 
+// Top-level error handler - should almost never trigger now
 main().catch((e) => {
   console.error('[FATAL] Unhandled error in main:', formatError(e));
+  console.error('[FATAL] This should not happen - please report this bug');
   process.exit(1);
 });
