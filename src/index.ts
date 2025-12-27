@@ -10,7 +10,7 @@ async function main() {
   // Launch browser with persistent context to reuse login session
   console.log(`Using persistent session at: ${config.userDataDir}`);
   const context = await chromium.launchPersistentContext(config.userDataDir, {
-    headless: false,
+    headless: config.headless,
     viewport: { width: 1920, height: 1080 },
   });
 

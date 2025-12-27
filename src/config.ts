@@ -6,6 +6,9 @@ export const config = {
   // Dry run mode - prints actions instead of clicking
   dryRun: process.env.DRY_RUN === 'true',
 
+  // Headless mode - run browser without visible window
+  headless: process.env.HEADLESS === 'true',
+
   // Persistent session directory
   userDataDir: process.env.USER_DATA_DIR || path.join(os.homedir(), '.bot-lnk-session'),
 
