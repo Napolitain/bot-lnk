@@ -1,31 +1,8 @@
-import { chromium, Page } from 'playwright';
-import * as fs from 'fs';
-import * as path from 'path';
+import { chromium } from 'playwright';
 import { config, validateConfig } from './config.js';
 import { runBotLoop } from './bot/index.js';
 import { createSolverClient } from './client/solver.js';
-import { BotError } from './errors/index.js';
-
-async function saveErrorScreenshot(page: Page, errorType: string): Promise<string | null> {
-  try {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const screenshotDir = path.join(config.userDataDir, 'error-screenshots');
-    fs.mkdirSync(screenshotDir, { recursive: true });
-    const screenshotPath = path.join(screenshotDir, `${errorType}-${timestamp}.png`);
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-    return screenshotPath;
-  } catch (screenshotError) {
-    console.error('[ERROR] Failed to save screenshot:', screenshotError);
-    return null;
-  }
-}
-
-function formatError(error: unknown): string {
-  if (error instanceof Error) {
-    return `${error.name}: ${error.message}\n${error.stack || ''}`;
-  }
-  return String(error);
-}
+import { saveScreenshot, formatError } from './utils/index.js';
 
 async function main() {
   // Validate config
@@ -105,13 +82,10 @@ async function main() {
       const errorMsg = formatError(e);
       
       // Save screenshot for debugging
-      const screenshotPath = await saveErrorScreenshot(page, 'bot-loop-error');
+      await saveScreenshot(page, 'bot-loop-error');
       
       console.error(`\n[ERROR] Bot loop failed (${consecutiveErrors}/${config.maxConsecutiveErrors})`);
       console.error(`[ERROR] ${errorMsg}`);
-      if (screenshotPath) {
-        console.error(`[ERROR] Screenshot saved: ${screenshotPath}`);
-      }
       console.error(`[ERROR] Page URL: ${page.url()}`);
 
       if (consecutiveErrors >= config.maxConsecutiveErrors) {
@@ -127,7 +101,7 @@ async function main() {
           console.log('[INFO] Recovery navigation completed');
         } catch (recoveryError) {
           console.error('[ERROR] Recovery failed:', formatError(recoveryError));
-          await saveErrorScreenshot(page, 'recovery-error');
+          await saveScreenshot(page, 'recovery-error');
         }
       } else {
         console.warn(`\n[WARN] Retrying in ${config.retryDelayMs / 1000} seconds...`);

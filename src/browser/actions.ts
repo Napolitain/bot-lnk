@@ -10,6 +10,7 @@ import { config } from '../config.js';
 import { BUILDING_TYPE_TO_INDEX, TECHNOLOGY_TO_NAME, UNIT_TYPE_TO_INDEX } from '../game/mappings.js';
 import { dismissPopups } from './popups.js';
 import { checkPageHealth } from './health.js';
+import { saveScreenshot } from '../utils/index.js';
 
 /** Get current upgrade queue count for a castle */
 async function getUpgradeQueueCount(page: Page, castleIndex: number): Promise<number> {
@@ -45,6 +46,7 @@ async function verifyPostAction(page: Page, actionName: string): Promise<boolean
   const health = await checkPageHealth(page);
   if (!health.healthy) {
     console.error(`[${actionName}] Page unhealthy after action: ${health.issues.join(', ')}`);
+    await saveScreenshot(page, `unhealthy-${actionName}`);
     return false;
   }
   return true;
@@ -105,7 +107,8 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
       return true;
     }
   } catch (e) {
-    console.log(`Failed to upgrade:`, e);
+    console.error(`Failed to upgrade:`, e);
+    await saveScreenshot(page, 'upgrade-failed');
   }
   return false;
 }
@@ -152,7 +155,8 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
       console.log(`Technology ${techName} not visible (may already be researched or not available)`);
     }
   } catch (e) {
-    console.log(`Failed to research ${techName}:`, e);
+    console.error(`Failed to research ${techName}:`, e);
+    await saveScreenshot(page, 'research-failed');
   }
   return false;
 }
@@ -262,7 +266,8 @@ export async function recruitUnits(page: Page, castleIndex: number, unitType: Un
     console.log(`Recruited ${amount}x ${unitTypeToJSON(unitType)} in castle ${castleIndex}`);
     return true;
   } catch (e) {
-    console.log(`Failed to recruit ${unitTypeToJSON(unitType)}:`, e);
+    console.error(`Failed to recruit ${unitTypeToJSON(unitType)}:`, e);
+    await saveScreenshot(page, 'recruit-failed');
   }
   return false;
 }
@@ -345,7 +350,8 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
     console.log(`Could not find confirm button for trade`);
     return false;
   } catch (e) {
-    console.log(`Failed to execute trade for castle ${castleIndex}:`, e);
+    console.error(`Failed to execute trade for castle ${castleIndex}:`, e);
+    await saveScreenshot(page, 'trade-failed');
   }
   return false;
 }

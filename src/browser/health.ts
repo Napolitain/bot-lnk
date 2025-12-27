@@ -1,4 +1,5 @@
 import { Page } from 'playwright';
+import { saveScreenshot } from '../utils/index.js';
 
 /** Expected game URLs */
 const GAME_URL_PATTERNS = [
@@ -140,6 +141,9 @@ export async function waitForHealthyPage(
       await page.waitForTimeout(delayMs);
     }
   }
+
+  // Final attempt failed - save screenshot
+  await saveScreenshot(page, `health-check-failed-${expectedView || 'unknown'}`);
 
   return lastResult;
 }
