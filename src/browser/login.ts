@@ -42,7 +42,18 @@ async function waitForGameLoad(page: Page, timeoutMs = 30000): Promise<boolean> 
   const loaded = await pollUntil(
     async () => {
       await dismissPopups(page);
-      return await isInGame(page);
+      const inGame = await isInGame(page);
+      if (inGame) {
+        // Double-check we're really in game and not on login
+        const loginScene = page.locator('.login-scene');
+        const stillOnLogin = await loginScene.isVisible({ timeout: 300 }).catch(() => false);
+        if (stillOnLogin) {
+          console.log('[Login] Still on login scene, not in game yet');
+          return false;
+        }
+        return true;
+      }
+      return false;
     },
     { timeout: timeoutMs, interval: 1000, description: 'game load' }
   );
@@ -169,7 +180,28 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
   if (await isOnPlayNow(page)) {
     console.log('[Login] Found PLAY NOW button, clicking...');
     try {
-      await page.getByText('PLAY NOW').click();
+      const playNowBtn = page.getByText('PLAY NOW');
+      await playNowBtn.click();
+      
+      // Wait for the login scene to disappear (indicates transition started)
+      console.log('[Login] Waiting for login scene to disappear...');
+      const loginGone = await pollUntil(
+        async () => {
+          const loginScene = page.locator('.login-scene');
+          const isVisible = await loginScene.isVisible({ timeout: 300 }).catch(() => false);
+          return !isVisible;
+        },
+        { timeout: 15000, interval: 500, description: 'login scene disappear' }
+      );
+      
+      if (!loginGone) {
+        console.warn('[Login] Login scene did not disappear after PLAY NOW click');
+        await saveDebugContext(page, 'login-scene-stuck');
+        // Try clicking again
+        console.log('[Login] Retrying PLAY NOW click...');
+        await playNowBtn.click({ force: true });
+        await page.waitForTimeout(2000);
+      }
       
       // Wait for server select or game load with polling
       const serverOrGame = await pollUntil(
@@ -189,7 +221,22 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
 
       if (serverOrGame === 'server') {
         console.log('[Login] Selecting server...');
-        await page.getByText(config.server).click();
+        const serverBtn = page.getByText(config.server);
+        await serverBtn.click();
+        
+        // Wait for server button to disappear
+        const serverGone = await pollUntil(
+          async () => {
+            const isVisible = await serverBtn.isVisible({ timeout: 300 }).catch(() => false);
+            return !isVisible;
+          },
+          { timeout: 10000, interval: 500, description: 'server button disappear' }
+        );
+        
+        if (!serverGone) {
+          console.warn('[Login] Server button did not disappear after click');
+          await saveDebugContext(page, 'server-select-stuck');
+        }
       }
 
       return await waitForGameLoad(page);
