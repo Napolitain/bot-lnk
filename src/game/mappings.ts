@@ -1,6 +1,7 @@
 import {
   BuildingType,
   Technology,
+  UnitType,
 } from '../generated/proto/config.js';
 
 // Map DOM building names to proto BuildingType
@@ -58,4 +59,30 @@ export const TECHNOLOGY_TO_NAME: Record<Technology, string> = {
   [Technology.HORSE_ARMOUR]: 'Horse armour',
   [Technology.TECH_UNKNOWN]: '',
   [Technology.UNRECOGNIZED]: '',
+};
+
+// Unit types from header, in column order (for DOM parsing)
+// Maps to icon classes: icon-unit-1, icon-unit-2, icon-unit-101, etc.
+export const UNIT_TYPES: UnitType[] = [
+  UnitType.SPEARMAN,      // icon-unit-1
+  UnitType.SWORDSMAN,     // icon-unit-2
+  UnitType.ARCHER,        // icon-unit-101
+  UnitType.CROSSBOWMAN,   // icon-unit-102
+  UnitType.HORSEMAN,      // icon-unit-201 (Armoured horseman)
+  UnitType.LANCER,        // icon-unit-202 (Lancer horseman)
+  UnitType.HANDCART,      // icon-unit-10001
+];
+
+// Map UnitType enum to column index
+export const UNIT_TYPE_TO_INDEX: Record<UnitType, number> = {
+  [UnitType.SPEARMAN]: 0,
+  [UnitType.SWORDSMAN]: 1,
+  [UnitType.ARCHER]: 2,
+  [UnitType.CROSSBOWMAN]: 3,
+  [UnitType.HORSEMAN]: 4,
+  [UnitType.LANCER]: 5,
+  [UnitType.HANDCART]: 6,
+  [UnitType.OXCART]: -1,  // Not shown in basic view
+  [UnitType.UNIT_UNKNOWN]: -1,
+  [UnitType.UNRECOGNIZED]: -1,
 };

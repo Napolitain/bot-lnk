@@ -11,6 +11,15 @@ async function isOnBuildingsView(page: Page): Promise<boolean> {
   }
 }
 
+async function isOnRecruitmentView(page: Page): Promise<boolean> {
+  try {
+    const recruitmentTable = page.locator('.table--global-overview--recruitment');
+    return await recruitmentTable.isVisible({ timeout: 2000 });
+  } catch {
+    return false;
+  }
+}
+
 export async function navigateToBuildingsView(page: Page): Promise<boolean> {
   // Dismiss popups first
   await dismissPopups(page);
@@ -37,3 +46,27 @@ export async function navigateToBuildingsView(page: Page): Promise<boolean> {
   return false;
 }
 
+export async function navigateToRecruitmentView(page: Page): Promise<boolean> {
+  await dismissPopups(page);
+
+  // Check if already on recruitment view
+  if (await isOnRecruitmentView(page)) {
+    return true;
+  }
+
+  // Try to click the recruitment button
+  try {
+    await dismissPopups(page);
+    const recruitmentBtn = page.getByRole('button', { name: 'Recruitment list' });
+    if (await recruitmentBtn.isVisible({ timeout: 5000 })) {
+      await recruitmentBtn.click();
+      await page.waitForTimeout(1000);
+      await dismissPopups(page);
+      return await isOnRecruitmentView(page);
+    }
+  } catch {
+    // Button not found
+  }
+
+  return false;
+}

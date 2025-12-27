@@ -2,10 +2,12 @@ import { Page } from 'playwright';
 import {
   BuildingType,
   Technology,
+  UnitType,
   buildingTypeToJSON,
+  unitTypeToJSON,
 } from '../generated/proto/config.js';
 import { config } from '../config.js';
-import { BUILDING_TYPE_TO_INDEX, TECHNOLOGY_TO_NAME } from '../game/mappings.js';
+import { BUILDING_TYPE_TO_INDEX, TECHNOLOGY_TO_NAME, UNIT_TYPE_TO_INDEX } from '../game/mappings.js';
 import { dismissPopups } from './popups.js';
 
 export async function upgradeBuilding(page: Page, castleIndex: number, buildingType: BuildingType): Promise<boolean> {
@@ -123,4 +125,61 @@ export async function clickFreeFinishButtons(page: Page): Promise<number> {
   }
 
   return count;
+}
+
+export async function recruitUnits(page: Page, castleIndex: number, unitType: UnitType, amount: number): Promise<boolean> {
+  const unitIndex = UNIT_TYPE_TO_INDEX[unitType];
+  if (unitIndex < 0) {
+    console.log(`Unknown unit type: ${unitType}`);
+    return false;
+  }
+
+  if (amount <= 0) {
+    console.log(`Invalid recruit amount: ${amount}`);
+    return false;
+  }
+
+  try {
+    await dismissPopups(page);
+
+    const castleRows = page.locator('.table--global-overview--recruitment .tabular-row:not(.global-overview--table--header)');
+    const row = castleRows.nth(castleIndex);
+    const unitCells = row.locator('.tabular-cell--recruitment');
+    const cell = unitCells.nth(unitIndex);
+    const recruitmentCell = cell.locator('.recruitment--cell');
+
+    // Set the amount in the input field
+    const input = recruitmentCell.locator('input.component--input');
+    if (await input.count() === 0) {
+      console.log(`Input field not found for ${unitTypeToJSON(unitType)}`);
+      return false;
+    }
+
+    // Check if recruit button is enabled
+    const recruitBtn = recruitmentCell.locator('button.button--action').last();
+    const isDisabled = await recruitBtn.evaluate(el => el.classList.contains('disabled'));
+    if (isDisabled) {
+      console.log(`Cannot recruit ${unitTypeToJSON(unitType)} - button disabled`);
+      return false;
+    }
+
+    if (config.dryRun) {
+      console.log(`[DRY RUN] Would recruit ${amount}x ${unitTypeToJSON(unitType)} in castle ${castleIndex}`);
+      return true;
+    }
+
+    // Clear input and type the amount
+    await input.fill(String(amount));
+    await page.waitForTimeout(200);
+
+    // Click recruit button
+    await recruitBtn.click();
+    await page.waitForTimeout(500);
+
+    console.log(`Recruited ${amount}x ${unitTypeToJSON(unitType)} in castle ${castleIndex}`);
+    return true;
+  } catch (e) {
+    console.log(`Failed to recruit ${unitTypeToJSON(unitType)}:`, e);
+  }
+  return false;
 }
