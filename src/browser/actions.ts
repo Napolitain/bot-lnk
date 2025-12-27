@@ -183,3 +183,68 @@ export async function recruitUnits(page: Page, castleIndex: number, unitType: Un
   }
   return false;
 }
+
+export async function executeTrade(page: Page, castleIndex: number): Promise<boolean> {
+  try {
+    await dismissPopups(page);
+
+    // Find the castle row in trading view
+    const castleRows = page.locator('.table--global-overview--trading .tabular-row:not(.global-overview--table--header)');
+    const row = castleRows.nth(castleIndex);
+
+    // Click the trade button for this castle (usually "Trade" or similar)
+    const tradeBtn = row.locator('button.button--action').first();
+    if (await tradeBtn.count() === 0) {
+      console.log(`No trade button found for castle ${castleIndex}`);
+      return false;
+    }
+
+    if (config.dryRun) {
+      console.log(`[DRY RUN] Would open trade dialog for castle ${castleIndex}`);
+      return true;
+    }
+
+    await tradeBtn.click();
+    await page.waitForTimeout(1000);
+    await dismissPopups(page);
+
+    // Now we should be in the trade dialog
+    // Click "Max" buttons to maximize transport units
+    const maxButtons = page.locator('.seek-bar-increase-value--button');
+    const maxCount = await maxButtons.count();
+    for (let i = 0; i < maxCount; i++) {
+      try {
+        await maxButtons.nth(i).click();
+        await page.waitForTimeout(100);
+      } catch {
+        // Some max buttons may not be clickable
+      }
+    }
+
+    await page.waitForTimeout(500);
+
+    // Click the confirm/send button
+    const confirmBtn = page.locator('.menu--content-section button.button--action').filter({ hasText: /send|trade|confirm/i }).first();
+    if (await confirmBtn.count() > 0 && await confirmBtn.isEnabled()) {
+      await confirmBtn.click();
+      await page.waitForTimeout(500);
+      console.log(`Executed trade for castle ${castleIndex}`);
+      return true;
+    } else {
+      // Try any action button in the dialog
+      const anyConfirmBtn = page.locator('.menu--content-section button.button--action').last();
+      if (await anyConfirmBtn.count() > 0 && await anyConfirmBtn.isEnabled()) {
+        await anyConfirmBtn.click();
+        await page.waitForTimeout(500);
+        console.log(`Executed trade for castle ${castleIndex}`);
+        return true;
+      }
+    }
+
+    console.log(`Could not find confirm button for trade`);
+    return false;
+  } catch (e) {
+    console.log(`Failed to execute trade for castle ${castleIndex}:`, e);
+  }
+  return false;
+}

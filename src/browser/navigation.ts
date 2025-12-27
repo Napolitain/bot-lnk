@@ -20,6 +20,15 @@ async function isOnRecruitmentView(page: Page): Promise<boolean> {
   }
 }
 
+async function isOnTradingView(page: Page): Promise<boolean> {
+  try {
+    const tradingTable = page.locator('.table--global-overview--trading');
+    return await tradingTable.isVisible({ timeout: 2000 });
+  } catch {
+    return false;
+  }
+}
+
 export async function navigateToBuildingsView(page: Page): Promise<boolean> {
   // Dismiss popups first
   await dismissPopups(page);
@@ -63,6 +72,31 @@ export async function navigateToRecruitmentView(page: Page): Promise<boolean> {
       await page.waitForTimeout(1000);
       await dismissPopups(page);
       return await isOnRecruitmentView(page);
+    }
+  } catch {
+    // Button not found
+  }
+
+  return false;
+}
+
+export async function navigateToTradingView(page: Page): Promise<boolean> {
+  await dismissPopups(page);
+
+  // Check if already on trading view
+  if (await isOnTradingView(page)) {
+    return true;
+  }
+
+  // Try to click the trading button
+  try {
+    await dismissPopups(page);
+    const tradingBtn = page.getByRole('button', { name: 'Trading list' });
+    if (await tradingBtn.isVisible({ timeout: 5000 })) {
+      await tradingBtn.click();
+      await page.waitForTimeout(1000);
+      await dismissPopups(page);
+      return await isOnTradingView(page);
     }
   } catch {
     // Button not found
