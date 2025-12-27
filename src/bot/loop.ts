@@ -95,7 +95,9 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   // Ensure we're logged in (this handles navigation and server selection)
   const loggedIn = await withRecovery(page, 'login', () => login(page), false);
   if (!loggedIn) {
-    console.warn('[Loop] Login failed, will retry next cycle');
+    console.warn('[Loop] Login failed, dumping debug...');
+    const { saveDebugContext } = await import('../utils/debug.js');
+    await saveDebugContext(page, 'login-failed-in-loop');
     return { success: false, sleepMs: config.retryDelayMs, error: 'Login failed' };
   }
 
@@ -124,7 +126,9 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   );
   
   if (!onBuildings) {
-    console.warn('[Loop] Could not navigate to buildings, will retry next cycle');
+    console.warn('[Loop] Could not navigate to buildings, dumping debug...');
+    const { saveDebugContext } = await import('../utils/debug.js');
+    await saveDebugContext(page, 'buildings-navigation-failed');
     return { success: false, sleepMs: config.retryDelayMs, error: 'Navigation failed' };
   }
 
@@ -138,7 +142,9 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   const castles = await withRecovery(page, 'get-castles', () => getCastles(page), []);
   
   if (castles.length === 0) {
-    console.warn('[Loop] No castles found, will retry next cycle');
+    console.warn('[Loop] No castles found, dumping debug...');
+    const { saveDebugContext } = await import('../utils/debug.js');
+    await saveDebugContext(page, 'no-castles-found');
     return { success: false, sleepMs: config.retryDelayMs, error: 'No castles found' };
   }
 

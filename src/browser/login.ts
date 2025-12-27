@@ -1,6 +1,7 @@
 import { Page } from 'playwright';
 import { config } from '../config.js';
 import { dismissPopups } from './popups.js';
+import { saveDebugContext } from '../utils/index.js';
 
 async function isInGame(page: Page): Promise<boolean> {
   // Check multiple indicators that we're in the game
@@ -29,15 +30,19 @@ async function isInGame(page: Page): Promise<boolean> {
   }
 }
 
-async function waitForGameLoad(page: Page, timeoutMs = 20000): Promise<boolean> {
+async function waitForGameLoad(page: Page, timeoutMs = 30000): Promise<boolean> {
+  console.log('[Login] Waiting for game to load...');
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
     await dismissPopups(page);
     if (await isInGame(page)) {
+      console.log('[Login] Game loaded successfully');
       return true;
     }
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
   }
+  console.warn(`[Login] Game did not load within ${timeoutMs / 1000}s`);
+  await saveDebugContext(page, 'game-load-timeout');
   return false;
 }
 
@@ -71,17 +76,26 @@ async function isOnServerSelect(page: Page): Promise<boolean> {
 
 export async function login(page: Page, retryCount = 0): Promise<boolean> {
   if (retryCount >= config.maxLoginRetries) {
-    console.error(`Login failed after ${config.maxLoginRetries} attempts`);
+    console.error(`[Login] Failed after ${config.maxLoginRetries} attempts`);
+    await saveDebugContext(page, 'login-max-retries-exceeded');
     return false;
   }
 
-  console.log('Checking login state...');
+  console.log(`[Login] Checking state (attempt ${retryCount + 1}/${config.maxLoginRetries})...`);
+  console.log(`[Login] Current URL: ${page.url()}`);
 
   // Navigate to game if not already there
   const currentUrl = page.url();
   if (!currentUrl.includes('lordsandknights.com')) {
-    await page.goto('https://lordsandknights.com/');
-    await page.waitForTimeout(2000);
+    console.log('[Login] Not on game site, navigating...');
+    try {
+      await page.goto('https://lordsandknights.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(3000);
+      console.log(`[Login] Navigated to: ${page.url()}`);
+    } catch (error) {
+      console.warn(`[Login] Navigation failed: ${error}`);
+      await saveDebugContext(page, 'login-navigation-failed');
+    }
   }
 
   // Dismiss any popups first
@@ -89,72 +103,90 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
 
   // Check if already in game
   if (await isInGame(page)) {
-    console.log('Already in game!');
+    console.log('[Login] Already in game!');
     return true;
   }
 
   // Check if on server select screen
   if (await isOnServerSelect(page)) {
-    console.log('On server select, choosing server...');
-    await page.getByText(config.server).click();
-    console.log('Waiting for game to load...');
-    return await waitForGameLoad(page);
+    console.log('[Login] On server select, choosing server...');
+    try {
+      await page.getByText(config.server).click();
+      return await waitForGameLoad(page);
+    } catch (error) {
+      console.warn(`[Login] Server select failed: ${error}`);
+      await saveDebugContext(page, 'login-server-select-failed');
+    }
   }
 
   // Check if on login page FIRST (priority over PLAY NOW)
   if (await isOnLoginPage(page)) {
-    console.log('On login page, logging in...');
+    console.log('[Login] On login page, logging in...');
 
-    // Fill login form
-    await page.getByRole('textbox', { name: 'Email' }).click();
-    await page.getByRole('textbox', { name: 'Email' }).fill(config.email);
-    await page.getByRole('textbox', { name: 'Password' }).click();
-    await page.getByRole('textbox', { name: 'Password' }).fill(config.password);
-    await page.getByRole('button', { name: 'Log in' }).click();
-
-    await page.waitForTimeout(2000);
-
-    // Handle OK dialog if it appears
-    const okButton = page.getByRole('button', { name: 'OK' });
-    if (await okButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await okButton.click();
+    try {
+      // Fill login form
+      await page.getByRole('textbox', { name: 'Email' }).click();
+      await page.getByRole('textbox', { name: 'Email' }).fill(config.email);
+      await page.getByRole('textbox', { name: 'Password' }).click();
+      await page.getByRole('textbox', { name: 'Password' }).fill(config.password);
       await page.getByRole('button', { name: 'Log in' }).click();
-      await page.waitForTimeout(2000);
-    }
 
-    // Select server if visible
-    if (await isOnServerSelect(page)) {
-      await page.getByText(config.server).click();
-    }
+      await page.waitForTimeout(3000);
 
-    console.log('Waiting for game to load...');
-    return await waitForGameLoad(page);
+      // Handle OK dialog if it appears
+      const okButton = page.getByRole('button', { name: 'OK' });
+      if (await okButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+        console.log('[Login] OK dialog appeared, dismissing...');
+        await okButton.click();
+        await page.getByRole('button', { name: 'Log in' }).click();
+        await page.waitForTimeout(2000);
+      }
+
+      // Select server if visible
+      if (await isOnServerSelect(page)) {
+        console.log('[Login] Selecting server...');
+        await page.getByText(config.server).click();
+      }
+
+      return await waitForGameLoad(page);
+    } catch (error) {
+      console.warn(`[Login] Login form submission failed: ${error}`);
+      await saveDebugContext(page, 'login-form-failed');
+    }
   }
 
   // Check if "PLAY NOW" button is visible (no login form, already have session)
   if (await isOnPlayNow(page)) {
-    console.log('Found PLAY NOW button, clicking...');
-    await page.getByText('PLAY NOW').click();
-    await page.waitForTimeout(2000);
-    await dismissPopups(page);
+    console.log('[Login] Found PLAY NOW button, clicking...');
+    try {
+      await page.getByText('PLAY NOW').click();
+      await page.waitForTimeout(3000);
+      await dismissPopups(page);
 
-    // After PLAY NOW, we should be on server select
-    if (await isOnServerSelect(page)) {
-      await page.getByText(config.server).click();
+      // After PLAY NOW, we should be on server select
+      if (await isOnServerSelect(page)) {
+        console.log('[Login] Selecting server...');
+        await page.getByText(config.server).click();
+      }
+
+      return await waitForGameLoad(page);
+    } catch (error) {
+      console.warn(`[Login] PLAY NOW click failed: ${error}`);
+      await saveDebugContext(page, 'login-play-now-failed');
     }
-
-    console.log('Waiting for game to load...');
-    return await waitForGameLoad(page);
   }
 
-  console.log(`Unknown page state (attempt ${retryCount + 1}/${config.maxLoginRetries}), clearing cache and reloading...`);
+  // Unknown state - dump debug and retry
+  console.warn(`[Login] Unknown page state, dumping debug info...`);
+  await saveDebugContext(page, 'login-unknown-state');
   
   // Clear cache and cookies to start fresh
+  console.log('[Login] Clearing cookies and reloading...');
   const context = page.context();
   await context.clearCookies();
   
   // Navigate fresh
-  await page.goto('https://lordsandknights.com/', { waitUntil: 'networkidle' });
+  await page.goto('https://lordsandknights.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(3000);
   
   return await login(page, retryCount + 1);

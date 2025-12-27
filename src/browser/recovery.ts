@@ -132,6 +132,9 @@ export async function withRecovery<T>(
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.warn(`[${actionName}] Failed: ${errorMsg}`);
     
+    // Save debug context BEFORE recovery attempt
+    await saveDebugContext(page, `${actionName}-failed`);
+    
     // Try to recover
     const recovery = await escalatingRecovery(page, actionName);
     
@@ -140,7 +143,9 @@ export async function withRecovery<T>(
       try {
         return await action();
       } catch (retryError) {
-        console.warn(`[${actionName}] Failed after recovery, using default value`);
+        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+        console.warn(`[${actionName}] Failed after recovery: ${retryMsg}, using default value`);
+        await saveDebugContext(page, `${actionName}-retry-failed`);
         return defaultValue;
       }
     }
