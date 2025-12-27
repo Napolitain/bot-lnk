@@ -85,7 +85,7 @@ async function main() {
 
   while (true) {
     try {
-      await runBotLoop(page, solverClient);
+      const suggestedSleepMs = await runBotLoop(page, solverClient);
       consecutiveErrors = 0; // Reset on success
 
       // In dry run mode, exit after one iteration
@@ -94,9 +94,10 @@ async function main() {
         break;
       }
 
-      // Wait before next iteration
-      console.log(`\nWaiting ${config.loopIntervalMs / 1000} seconds before next check...`);
-      await page.waitForTimeout(config.loopIntervalMs);
+      // Use suggested sleep time if available, otherwise use default interval
+      const sleepMs = suggestedSleepMs ?? config.loopIntervalMs;
+      console.log(`\nWaiting ${Math.round(sleepMs / 1000)} seconds before next check...`);
+      await page.waitForTimeout(sleepMs);
 
     } catch (e) {
       consecutiveErrors++;

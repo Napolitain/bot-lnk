@@ -13,7 +13,7 @@ import { upgradeBuilding, researchTechnology, clickFreeFinishButtons } from './b
 import { getCastles } from './game/castle.js';
 import { getNextActionsForCastle } from './client/solver.js';
 
-export async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<void> {
+export async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<number | null> {
   // Reload page to get fresh resource values
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(2000);
@@ -43,12 +43,14 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
     const iron = castle.config.resources.find(r => r.type === ResourceType.IRON)?.amount || 0;
     const food = castle.config.resources.find(r => r.type === ResourceType.FOOD)?.amount || 0;
 
-    console.log(`\n${castle.name}:`);
+    console.log(`\n${castle.name}: (${castle.upgradeQueueCount} building(s) in queue)`);
     console.log(`  Resources: Wood=${wood}, Stone=${stone}, Iron=${iron}, Food=${food}`);
     console.log(`  Buildings:`);
     for (const bl of castle.config.buildingLevels) {
       const canUpgrade = castle.buildingCanUpgrade.get(bl.type) ? '[CAN UPGRADE]' : '';
-      console.log(`    - ${buildingTypeToJSON(bl.type)}: Lv ${bl.level} ${canUpgrade}`);
+      const status = castle.buildingUpgradeStatus.get(bl.type);
+      const upgrading = status?.isUpgrading ? `[UPGRADING → Lv ${status.targetLevel}, ${status.timeRemaining}]` : '';
+      console.log(`    - ${buildingTypeToJSON(bl.type)}: Lv ${bl.level} ${canUpgrade} ${upgrading}`);
     }
   }
 
@@ -75,8 +77,25 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
 
   // For each castle, try to upgrade one building (each castle has its own queue)
   let totalUpgrades = 0;
+  let minTimeRemainingMs: number | null = null;
+
   for (let ci = 0; ci < castles.length; ci++) {
     const castle = castles[ci];
+
+    // Skip if queue is full (2 or more upgrades in progress)
+    if (castle.upgradeQueueCount >= 2) {
+      console.log(`\n[${castle.name}] Queue full (${castle.upgradeQueueCount}/2), skipping upgrades`);
+      
+      // Track minimum time remaining for sleep calculation
+      for (const status of castle.buildingUpgradeStatus.values()) {
+        if (status.isUpgrading && status.timeRemainingMs) {
+          if (minTimeRemainingMs === null || status.timeRemainingMs < minTimeRemainingMs) {
+            minTimeRemainingMs = status.timeRemainingMs;
+          }
+        }
+      }
+      continue;
+    }
 
     // Try to get next action from solver
     const { nextAction } = await getNextActionsForCastle(solverClient, castle);
@@ -104,8 +123,40 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
       totalUpgrades++;
     } else {
       console.log(`\n[${castle.name}] No buildings available to upgrade.`);
+      
+      // Track minimum time remaining for sleep calculation
+      for (const status of castle.buildingUpgradeStatus.values()) {
+        if (status.isUpgrading && status.timeRemainingMs) {
+          if (minTimeRemainingMs === null || status.timeRemainingMs < minTimeRemainingMs) {
+            minTimeRemainingMs = status.timeRemainingMs;
+          }
+        }
+      }
     }
   }
 
   console.log(`\nTotal upgrades this cycle: ${totalUpgrades}/${castles.length} castles`);
+  
+  // Calculate optimal sleep time based on free finish threshold
+  if (minTimeRemainingMs !== null) {
+    const freeFinishThresholdMs = 5 * 60 * 1000; // 5 minutes - builds under this can be finished for free
+    const minSleepMs = 30 * 1000; // 30 seconds minimum
+    const maxSleepMs = 10 * 60 * 1000; // 10 minutes max
+
+    let sleepMs: number;
+    if (minTimeRemainingMs > freeFinishThresholdMs) {
+      // Wake up when free finish becomes available
+      sleepMs = minTimeRemainingMs - freeFinishThresholdMs;
+      console.log(`\nSleeping ${Math.round(sleepMs / 1000)}s until free finish available (${Math.round(minTimeRemainingMs / 1000)}s remaining)`);
+    } else {
+      // Already eligible for free finish, check again soon
+      sleepMs = minSleepMs;
+      console.log(`\nBuild already under 5min (${Math.round(minTimeRemainingMs / 1000)}s), checking again in ${sleepMs / 1000}s`);
+    }
+    
+    sleepMs = Math.min(Math.max(sleepMs, minSleepMs), maxSleepMs);
+    return sleepMs;
+  }
+  
+  return null;  // No suggested sleep time
 }

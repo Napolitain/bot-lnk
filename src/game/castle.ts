@@ -7,10 +7,36 @@ import {
 import { BUILDING_NAME_TO_TYPE, BUILDING_TYPES } from './mappings.js';
 import { dismissPopups } from '../browser/popups.js';
 
+export interface BuildingUpgradeStatus {
+  isUpgrading: boolean;
+  targetLevel: number | null;
+  timeRemaining: string | null;  // e.g., "2 minutes"
+  timeRemainingMs: number | null;  // parsed milliseconds
+}
+
 export interface CastleState {
   name: string;
   config: CastleConfig;
   buildingCanUpgrade: Map<BuildingType, boolean>;
+  buildingUpgradeStatus: Map<BuildingType, BuildingUpgradeStatus>;
+  upgradeQueueCount: number;  // number of buildings currently upgrading
+}
+
+/** Parse time string like "2 minutes", "5 seconds", "1 hour" to milliseconds */
+function parseTimeToMs(timeStr: string): number | null {
+  const match = timeStr.match(/(\d+)\s*(second|minute|hour|day)s?/i);
+  if (!match) return null;
+  
+  const value = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  
+  switch (unit) {
+    case 'second': return value * 1000;
+    case 'minute': return value * 60 * 1000;
+    case 'hour': return value * 60 * 60 * 1000;
+    case 'day': return value * 24 * 60 * 60 * 1000;
+    default: return null;
+  }
 }
 
 export async function getCastles(page: Page): Promise<CastleState[]> {
@@ -45,22 +71,66 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
 
     const buildingLevels: { type: BuildingType; level: number }[] = [];
     const buildingCanUpgrade = new Map<BuildingType, boolean>();
+    const buildingUpgradeStatus = new Map<BuildingType, BuildingUpgradeStatus>();
+    let upgradeQueueCount = 0;
 
     for (let j = 0; j < buildingCount && j < BUILDING_TYPES.length; j++) {
       const cell = buildingCells.nth(j);
-      const upgradeCell = cell.locator('.upgrade-building--cell');
+      const upgradeCells = cell.locator('.upgrade-building--cell');
+      const upgradeCellCount = await upgradeCells.count();
 
-      // Level is the first div text
-      const levelText = await upgradeCell.locator('> div').first().textContent();
-      const level = parseInt(levelText || '0', 10);
+      const firstCell = upgradeCells.first();
+      const buildingType = BUILDING_NAME_TO_TYPE[BUILDING_TYPES[j]];
+
+      // Check if building is currently upgrading (has a second .upgrade-building--cell)
+      let isUpgrading = false;
+      let targetLevel: number | null = null;
+      let timeRemaining: string | null = null;
+      let timeRemainingMs: number | null = null;
+
+      if (upgradeCellCount > 1) {
+        // Building is upgrading - second cell has construction info
+        isUpgrading = true;
+        upgradeQueueCount++;
+
+        const constructionCell = upgradeCells.nth(1);
+        
+        // Get time remaining from .complete div
+        const completeDiv = constructionCell.locator('.complete');
+        if (await completeDiv.count() > 0) {
+          timeRemaining = await completeDiv.textContent() || null;
+          if (timeRemaining) {
+            timeRemainingMs = parseTimeToMs(timeRemaining);
+          }
+        }
+
+        // Get target level - it's in a div that's not .complete
+        const levelDivs = constructionCell.locator('> div:not(.complete)');
+        if (await levelDivs.count() > 0) {
+          const targetLevelText = await levelDivs.first().textContent();
+          targetLevel = parseInt(targetLevelText || '0', 10);
+        }
+      }
+
+      // Get current level from first cell
+      const levelText = await firstCell.locator('> div').first().textContent();
+      const currentLevel = parseInt(levelText || '0', 10);
+
+      // Use target level if upgrading, otherwise current level
+      const effectiveLevel = isUpgrading && targetLevel ? targetLevel : currentLevel;
 
       // Check if upgrade button exists and is enabled (use first() to avoid strict mode with multiple buttons)
-      const upgradeBtn = upgradeCell.locator('button.button--action').first();
+      const upgradeBtn = firstCell.locator('button.button--action').first();
       const canUpgrade = await upgradeBtn.count() > 0 && await upgradeBtn.isEnabled().catch(() => false);
 
-      const buildingType = BUILDING_NAME_TO_TYPE[BUILDING_TYPES[j]];
-      buildingLevels.push({ type: buildingType, level });
+      buildingLevels.push({ type: buildingType, level: effectiveLevel });
       buildingCanUpgrade.set(buildingType, canUpgrade);
+      buildingUpgradeStatus.set(buildingType, {
+        isUpgrading,
+        targetLevel,
+        timeRemaining,
+        timeRemainingMs,
+      });
     }
 
     const config: CastleConfig = {
@@ -78,6 +148,8 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
       name: castleName.trim(),
       config,
       buildingCanUpgrade,
+      buildingUpgradeStatus,
+      upgradeQueueCount,
     });
   }
 
