@@ -44,29 +44,35 @@ function calculateSleepTime(minTimeRemainingMs: number): number {
 
 /** Main bot loop */
 export async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<number | null> {
-  // Reload page to get fresh resource values
-  await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForTimeout(2000);
-
-  // Initial health check
-  const initialHealth = await checkPageHealth(page);
-  if (!initialHealth.healthy) {
-    console.warn(`[Health] Initial check failed: ${initialHealth.issues.join(', ')}`);
-    // Try to dismiss popups and check again
-    await dismissPopups(page);
-    const retryHealth = await waitForHealthyPage(page);
-    if (!retryHealth.healthy) {
-      throw new BotError(`Page unhealthy after retry: ${retryHealth.issues.join(', ')}`);
-    }
+  // If on about:blank or not on game, navigate first before reload
+  const currentUrl = page.url();
+  if (currentUrl === 'about:blank' || !currentUrl.includes('lordsandknights.com')) {
+    await page.goto('https://lordsandknights.com/', { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(3000);
   }
 
   // Dismiss any popups first
   await dismissPopups(page);
 
-  // Ensure we're logged in
+  // Ensure we're logged in (this handles navigation and server selection)
   const loggedIn = await login(page);
   if (!loggedIn) {
     throw new LoginError();
+  }
+
+  // Now we're in game - reload to get fresh resource values
+  await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+  await page.waitForTimeout(2000);
+
+  // Health check after login and reload
+  const initialHealth = await checkPageHealth(page);
+  if (!initialHealth.healthy) {
+    console.warn(`[Health] Initial check failed: ${initialHealth.issues.join(', ')}`);
+    await dismissPopups(page);
+    const retryHealth = await waitForHealthyPage(page);
+    if (!retryHealth.healthy) {
+      throw new BotError(`Page unhealthy after retry: ${retryHealth.issues.join(', ')}`);
+    }
   }
 
   // Navigate to buildings view
