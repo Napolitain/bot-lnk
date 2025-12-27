@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { saveScreenshot } from '../utils/index.js';
+import { saveDebugContext } from '../utils/index.js';
 
 /** Expected game URLs */
 const GAME_URL_PATTERNS = [
@@ -142,8 +142,8 @@ export async function waitForHealthyPage(
     }
   }
 
-  // Final attempt failed - save screenshot
-  await saveScreenshot(page, `health-check-failed-${expectedView || 'unknown'}`);
+  // Final attempt failed - save debug context
+  await saveDebugContext(page, `health-check-failed-${expectedView || 'unknown'}`);
 
   return lastResult;
 }

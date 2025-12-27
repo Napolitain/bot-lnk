@@ -10,18 +10,42 @@ import { config } from '../config.js';
 import { BUILDING_TYPE_TO_INDEX, TECHNOLOGY_TO_NAME, UNIT_TYPE_TO_INDEX } from '../game/mappings.js';
 import { dismissPopups } from './popups.js';
 import { checkPageHealth } from './health.js';
-import { saveScreenshot } from '../utils/index.js';
+import { saveDebugContext } from '../utils/index.js';
 
-/** Get current upgrade queue count for a castle */
+/** Get current upgrade queue count for a castle by counting buildings with multiple cells */
 async function getUpgradeQueueCount(page: Page, castleIndex: number): Promise<number> {
   try {
     const castleRows = page.locator('.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)');
     const row = castleRows.nth(castleIndex);
-    // Count cells that have upgrading status (timer visible)
-    const upgradingCells = row.locator('.tabular-cell--upgrade-building .upgrade-status--timer');
-    return await upgradingCells.count();
+    const buildingCells = row.locator('.tabular-cell--upgrade-building');
+    const cellCount = await buildingCells.count();
+    
+    let upgradingCount = 0;
+    for (let i = 0; i < cellCount; i++) {
+      const cell = buildingCells.nth(i);
+      // A building is upgrading if it has more than one .upgrade-building--cell
+      const upgradeCells = cell.locator('.upgrade-building--cell');
+      if (await upgradeCells.count() > 1) {
+        upgradingCount++;
+      }
+    }
+    return upgradingCount;
   } catch {
     return -1;
+  }
+}
+
+/** Check if a specific building is currently upgrading */
+async function isBuildingUpgrading(page: Page, castleIndex: number, buildingIndex: number): Promise<boolean> {
+  try {
+    const castleRows = page.locator('.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)');
+    const row = castleRows.nth(castleIndex);
+    const buildingCells = row.locator('.tabular-cell--upgrade-building');
+    const cell = buildingCells.nth(buildingIndex);
+    const upgradeCells = cell.locator('.upgrade-building--cell');
+    return await upgradeCells.count() > 1;
+  } catch {
+    return false;
   }
 }
 
@@ -41,12 +65,12 @@ async function getUnitCount(page: Page, castleIndex: number, unitIndex: number):
 }
 
 /** Verify page is still healthy after an action */
-async function verifyPostAction(page: Page, actionName: string): Promise<boolean> {
+async function verifyPostAction(page: Page, actionName: string, selector?: string): Promise<boolean> {
   await page.waitForTimeout(300);
   const health = await checkPageHealth(page);
   if (!health.healthy) {
     console.error(`[${actionName}] Page unhealthy after action: ${health.issues.join(', ')}`);
-    await saveScreenshot(page, `unhealthy-${actionName}`);
+    await saveDebugContext(page, `unhealthy-${actionName}`, selector);
     return false;
   }
   return true;
@@ -59,12 +83,14 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
     return false;
   }
 
+  const cellSelector = `.table--global-overview--buildings .tabular-row:not(.global-overview--table--header):nth-child(${castleIndex + 2}) .tabular-cell--upgrade-building:nth-child(${buildingIndex + 2})`;
+
   try {
     // Dismiss popups before action
     await dismissPopups(page);
 
-    // Get queue count before action for verification
-    const queueBefore = await getUpgradeQueueCount(page, castleIndex);
+    // Check if building is already upgrading before we start
+    const wasUpgradingBefore = await isBuildingUpgrading(page, castleIndex, buildingIndex);
 
     const castleRows = page.locator('.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)');
     const row = castleRows.nth(castleIndex);
@@ -92,15 +118,18 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
       }
 
       // Verify: page still healthy
-      if (!await verifyPostAction(page, 'upgradeBuilding')) {
+      if (!await verifyPostAction(page, 'upgradeBuilding', cellSelector)) {
         return false;
       }
 
-      // Verify: queue count increased (or building started upgrading)
-      const queueAfter = await getUpgradeQueueCount(page, castleIndex);
-      if (queueBefore >= 0 && queueAfter >= 0 && queueAfter <= queueBefore) {
-        console.warn(`[upgradeBuilding] Queue did not increase (${queueBefore} -> ${queueAfter}) - action may have failed`);
-        // Don't return false - the upgrade might have finished instantly or we misread
+      // Verify: this specific building is now upgrading (if it wasn't before)
+      if (!wasUpgradingBefore) {
+        const isUpgradingNow = await isBuildingUpgrading(page, castleIndex, buildingIndex);
+        if (!isUpgradingNow) {
+          console.warn(`[upgradeBuilding] ${buildingTypeToJSON(buildingType)} doesn't appear to be upgrading - action may have failed`);
+          await saveDebugContext(page, 'upgrade-verification-failed', cellSelector);
+          // Don't return false - might be a detection issue
+        }
       }
 
       console.log(`Upgraded ${buildingTypeToJSON(buildingType)} in castle ${castleIndex}`);
@@ -108,7 +137,7 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
     }
   } catch (e) {
     console.error(`Failed to upgrade:`, e);
-    await saveScreenshot(page, 'upgrade-failed');
+    await saveDebugContext(page, 'upgrade-failed', cellSelector);
   }
   return false;
 }
@@ -119,6 +148,8 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
     console.log(`Unknown technology: ${technology}`);
     return false;
   }
+
+  const techSelector = `text="${techName}"`;
 
   try {
     // Dismiss popups before action
@@ -145,7 +176,7 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
       await dismissPopups(page);
 
       // Verify page health
-      if (!await verifyPostAction(page, 'researchTechnology')) {
+      if (!await verifyPostAction(page, 'researchTechnology', techSelector)) {
         return false;
       }
 
@@ -156,7 +187,7 @@ export async function researchTechnology(page: Page, technology: Technology): Pr
     }
   } catch (e) {
     console.error(`Failed to research ${techName}:`, e);
-    await saveScreenshot(page, 'research-failed');
+    await saveDebugContext(page, 'research-failed', techSelector);
   }
   return false;
 }
@@ -216,6 +247,8 @@ export async function recruitUnits(page: Page, castleIndex: number, unitType: Un
     return false;
   }
 
+  const cellSelector = `.table--global-overview--recruitment .tabular-row:not(.global-overview--table--header):nth-child(${castleIndex + 2}) .tabular-cell--recruitment:nth-child(${unitIndex + 2})`;
+
   try {
     await dismissPopups(page);
 
@@ -257,7 +290,7 @@ export async function recruitUnits(page: Page, castleIndex: number, unitType: Un
     await page.waitForTimeout(500);
 
     // Verify page health
-    if (!await verifyPostAction(page, 'recruitUnits')) {
+    if (!await verifyPostAction(page, 'recruitUnits', cellSelector)) {
       return false;
     }
 
@@ -267,12 +300,14 @@ export async function recruitUnits(page: Page, castleIndex: number, unitType: Un
     return true;
   } catch (e) {
     console.error(`Failed to recruit ${unitTypeToJSON(unitType)}:`, e);
-    await saveScreenshot(page, 'recruit-failed');
+    await saveDebugContext(page, 'recruit-failed', cellSelector);
   }
   return false;
 }
 
 export async function executeTrade(page: Page, castleIndex: number): Promise<boolean> {
+  const rowSelector = `.table--global-overview--trading .tabular-row:not(.global-overview--table--header):nth-child(${castleIndex + 2})`;
+
   try {
     await dismissPopups(page);
 
@@ -300,6 +335,7 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
     const dialogVisible = await page.locator('.menu--content-section').isVisible({ timeout: 2000 }).catch(() => false);
     if (!dialogVisible) {
       console.warn(`[executeTrade] Trade dialog did not open for castle ${castleIndex}`);
+      await saveDebugContext(page, 'trade-dialog-failed', rowSelector);
       return false;
     }
 
@@ -325,7 +361,7 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
       await page.waitForTimeout(500);
 
       // Verify page health after trade
-      if (!await verifyPostAction(page, 'executeTrade')) {
+      if (!await verifyPostAction(page, 'executeTrade', '.menu--content-section')) {
         return false;
       }
 
@@ -338,7 +374,7 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
         await anyConfirmBtn.click();
         await page.waitForTimeout(500);
 
-        if (!await verifyPostAction(page, 'executeTrade')) {
+        if (!await verifyPostAction(page, 'executeTrade', '.menu--content-section')) {
           return false;
         }
 
@@ -348,10 +384,11 @@ export async function executeTrade(page: Page, castleIndex: number): Promise<boo
     }
 
     console.log(`Could not find confirm button for trade`);
+    await saveDebugContext(page, 'trade-confirm-not-found', '.menu--content-section');
     return false;
   } catch (e) {
     console.error(`Failed to execute trade for castle ${castleIndex}:`, e);
-    await saveScreenshot(page, 'trade-failed');
+    await saveDebugContext(page, 'trade-failed', rowSelector);
   }
   return false;
 }

@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { config, validateConfig } from './config.js';
 import { runBotLoop } from './bot/index.js';
 import { createSolverClient } from './client/solver.js';
-import { saveScreenshot, formatError } from './utils/index.js';
+import { saveDebugContext, formatError } from './utils/index.js';
 
 async function main() {
   // Validate config
@@ -81,8 +81,8 @@ async function main() {
       consecutiveErrors++;
       const errorMsg = formatError(e);
       
-      // Save screenshot for debugging
-      await saveScreenshot(page, 'bot-loop-error');
+      // Save debug context for debugging
+      await saveDebugContext(page, 'bot-loop-error');
       
       console.error(`\n[ERROR] Bot loop failed (${consecutiveErrors}/${config.maxConsecutiveErrors})`);
       console.error(`[ERROR] ${errorMsg}`);
@@ -101,7 +101,7 @@ async function main() {
           console.log('[INFO] Recovery navigation completed');
         } catch (recoveryError) {
           console.error('[ERROR] Recovery failed:', formatError(recoveryError));
-          await saveScreenshot(page, 'recovery-error');
+          await saveDebugContext(page, 'recovery-error');
         }
       } else {
         console.warn(`\n[WARN] Retrying in ${config.retryDelayMs / 1000} seconds...`);
