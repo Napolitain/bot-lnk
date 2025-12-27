@@ -54,7 +54,7 @@ export async function pollUntil(
  * @returns the value if found, undefined if timeout
  */
 export async function pollFor<T>(
-  getter: () => Promise<T | null | undefined>,
+  getter: () => Promise<T | null | undefined | false>,
   options: PollOptions = {}
 ): Promise<T | undefined> {
   const {
@@ -70,11 +70,11 @@ export async function pollFor<T>(
     attempts++;
     try {
       const value = await getter();
-      if (value !== null && value !== undefined) {
+      if (value !== null && value !== undefined && value !== false) {
         if (attempts > 1) {
-          console.log(`[Poll] ${description} found after ${attempts} attempts (${Date.now() - startTime}ms)`);
+          console.log(`[Poll] ${description} met after ${attempts} attempts (${Date.now() - startTime}ms)`);
         }
-        return value;
+        return value as T;
       }
     } catch (error) {
       // Getter threw, treat as not found
@@ -83,7 +83,7 @@ export async function pollFor<T>(
     await new Promise(resolve => setTimeout(resolve, interval));
   }
 
-  console.warn(`[Poll] ${description} not found after ${timeout}ms (${attempts} attempts)`);
+  console.warn(`[Poll] ${description} not met after ${timeout}ms (${attempts} attempts)`);
   return undefined;
 }
 

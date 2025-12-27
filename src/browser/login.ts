@@ -1,7 +1,7 @@
 import { Page } from 'playwright';
 import { config } from '../config.js';
 import { dismissPopups } from './popups.js';
-import { saveDebugContext, pollUntil } from '../utils/index.js';
+import { saveDebugContext, pollUntil, pollFor } from '../utils/index.js';
 
 async function isInGame(page: Page): Promise<boolean> {
   // Check multiple indicators that we're in the game - use short timeouts for polling
@@ -204,7 +204,7 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
       }
       
       // Wait for server select or game load with polling
-      const serverOrGame = await pollUntil(
+      const serverOrGame = await pollFor<'game' | 'server'>(
         async () => {
           await dismissPopups(page);
           if (await isInGame(page)) return 'game';
