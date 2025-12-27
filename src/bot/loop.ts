@@ -101,15 +101,7 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
     return { success: false, sleepMs: config.retryDelayMs, error: 'Login failed' };
   }
 
-  // Now we're in game - reload to get fresh resource values
-  try {
-    await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
-    await page.waitForTimeout(2000);
-  } catch (error) {
-    console.warn('[Loop] Reload failed, continuing anyway...');
-  }
-
-  // Health check after login and reload (non-blocking)
+  // Health check after login (non-blocking)
   const initialHealth = await checkPageHealth(page);
   if (!initialHealth.healthy) {
     console.warn(`[Health] Issues detected: ${initialHealth.issues.join(', ')}`);
