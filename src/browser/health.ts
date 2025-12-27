@@ -120,30 +120,40 @@ export async function checkPageHealth(
   };
 }
 
-/** Wait for page to become healthy, with retries */
+/** Wait for page to become healthy, with retries. Non-blocking - always returns, never throws. */
 export async function waitForHealthyPage(
   page: Page,
   expectedView?: 'buildings' | 'recruitment' | 'trading',
-  maxAttempts = 3,
+  maxAttempts = 2,
   delayMs = 1000
 ): Promise<HealthCheckResult> {
   let lastResult: HealthCheckResult = { healthy: false, issues: ['Not checked'], url: '' };
 
   for (let i = 0; i < maxAttempts; i++) {
-    lastResult = await checkPageHealth(page, expectedView);
+    try {
+      lastResult = await checkPageHealth(page, expectedView);
+    } catch (error) {
+      // Health check itself failed - page might be navigating
+      lastResult = { healthy: false, issues: ['Health check error'], url: page.url() };
+    }
     
     if (lastResult.healthy) {
       return lastResult;
     }
 
     if (i < maxAttempts - 1) {
-      console.log(`[Health] Unhealthy (attempt ${i + 1}/${maxAttempts}): ${lastResult.issues.join(', ')}`);
-      await page.waitForTimeout(delayMs);
+      console.log(`[Health] Check ${i + 1}/${maxAttempts}: ${lastResult.issues.join(', ')}`);
+      try {
+        await page.waitForTimeout(delayMs);
+      } catch {
+        // Page closed during wait - ignore
+      }
     }
   }
 
-  // Final attempt failed - save debug context
-  await saveDebugContext(page, `health-check-failed-${expectedView || 'unknown'}`);
+  // Don't save debug context for health checks - they're informational only
+  // Just log and continue
+  console.log(`[Health] Final check: ${lastResult.issues.join(', ')}`);
 
   return lastResult;
 }

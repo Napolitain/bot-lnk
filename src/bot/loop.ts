@@ -70,15 +70,22 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
 
 /** Internal bot loop implementation */
 async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceClient): Promise<BotLoopResult> {
-  // If on about:blank or not on game, navigate first
+  // Always ensure we're on the game site first
   const currentUrl = page.url();
+  console.log(`[Loop] Current URL: ${currentUrl}`);
+  
   if (currentUrl === 'about:blank' || !currentUrl.includes('lordsandknights.com')) {
+    console.log('[Loop] Not on game site, navigating...');
     try {
-      await page.goto('https://lordsandknights.com/', { waitUntil: 'networkidle', timeout: 30000 });
-      await page.waitForTimeout(3000);
+      await page.goto('https://lordsandknights.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+      // Wait for page to stabilize
+      await page.waitForTimeout(5000);
+      console.log(`[Loop] Navigated to: ${page.url()}`);
     } catch (error) {
       console.warn('[Loop] Navigation failed, attempting recovery...');
       await escalatingRecovery(page, 'initial-navigation');
+      // Give it another moment after recovery
+      await page.waitForTimeout(3000);
     }
   }
 
