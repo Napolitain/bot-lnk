@@ -2,8 +2,9 @@ import { chromium, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config, validateConfig } from './config.js';
-import { runBotLoop } from './bot.js';
+import { runBotLoop } from './bot/index.js';
 import { createSolverClient } from './client/solver.js';
+import { BotError } from './errors/index.js';
 
 async function saveErrorScreenshot(page: Page, errorType: string): Promise<string | null> {
   try {

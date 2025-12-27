@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as os from 'os';
 import 'dotenv/config';
+import { BuildingType } from './generated/proto/config.js';
 
 export const config = {
   // Dry run mode - prints actions instead of clicking
@@ -29,6 +30,33 @@ export const config = {
   longRetryDelayMs: 60000,
   maxConsecutiveErrors: 3,
   maxLoginRetries: 3,
+
+  // Sleep timing
+  sleep: {
+    minMs: 30 * 1000,           // 30 seconds minimum
+    maxMs: 10 * 60 * 1000,      // 10 minutes max
+    freeFinishThresholdMs: 5 * 60 * 1000,  // 5 minutes - builds under this can be finished for free
+  },
+
+  // Building queue
+  maxBuildingQueue: 2,
+
+  // Target building levels (end of build order)
+  targets: [
+    { type: BuildingType.LUMBERJACK, level: 30 },
+    { type: BuildingType.QUARRY, level: 30 },
+    { type: BuildingType.ORE_MINE, level: 30 },
+    { type: BuildingType.FARM, level: 30 },
+    { type: BuildingType.WOOD_STORE, level: 20 },
+    { type: BuildingType.STONE_STORE, level: 20 },
+    { type: BuildingType.ORE_STORE, level: 20 },
+    { type: BuildingType.KEEP, level: 10 },
+    { type: BuildingType.ARSENAL, level: 30 },
+    { type: BuildingType.LIBRARY, level: 10 },
+    { type: BuildingType.TAVERN, level: 10 },
+    { type: BuildingType.MARKET, level: 8 },
+    { type: BuildingType.FORTIFICATIONS, level: 20 },
+  ],
 };
 
 export function validateConfig(): void {
