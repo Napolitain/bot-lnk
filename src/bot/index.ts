@@ -1,1 +1,2 @@
-export { runBotLoop, BotLoopResult } from './loop.js';
+export { runBotLoop } from './loop.js';
+export type { BotLoopResult } from './loop.js';
