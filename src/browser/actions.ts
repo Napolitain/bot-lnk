@@ -119,6 +119,13 @@ export async function upgradeBuilding(page: Page, castleIndex: number, buildingT
     // Use first() to handle cells with multiple buttons (e.g., upgrade + cancel)
     const upgradeBtn = cell.locator('button.button--action').first();
 
+    // Check for CSS 'disabled' class (not enough resources) - this is different from HTML disabled attribute
+    const hasDisabledClass = await upgradeBtn.evaluate(el => el.classList.contains('disabled')).catch(() => false);
+    if (hasDisabledClass) {
+      console.warn(`[upgradeBuilding] ${buildingTypeToJSON(buildingType)} button disabled (insufficient resources) - skipping castle ${castleIndex}`);
+      return false;
+    }
+
     if (await upgradeBtn.isEnabled().catch(() => false)) {
       if (config.dryRun) {
         console.log(`[DRY RUN] Would click upgrade button for ${buildingTypeToJSON(buildingType)} in castle ${castleIndex}`);
