@@ -1,5 +1,5 @@
-import * as path from 'path';
-import * as os from 'os';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import 'dotenv/config';
 import { BuildingType } from './generated/proto/config.js';
 
@@ -14,7 +14,8 @@ export const config = {
   blockMedia: process.env.BLOCK_MEDIA === 'true',
 
   // Persistent session directory
-  userDataDir: process.env.USER_DATA_DIR || path.join(os.homedir(), '.bot-lnk-session'),
+  userDataDir:
+    process.env.USER_DATA_DIR || path.join(os.homedir(), '.bot-lnk-session'),
 
   // Solver gRPC address
   solverAddress: process.env.SOLVER_ADDRESS || 'localhost:50051',
@@ -33,9 +34,9 @@ export const config = {
 
   // Sleep timing
   sleep: {
-    minMs: 30 * 1000,           // 30 seconds minimum
-    maxMs: 10 * 60 * 1000,      // 10 minutes max
-    freeFinishThresholdMs: 5 * 60 * 1000,  // 5 minutes - builds under this can be finished for free
+    minMs: 30 * 1000, // 30 seconds minimum
+    maxMs: 10 * 60 * 1000, // 10 minutes max
+    freeFinishThresholdMs: 5 * 60 * 1000, // 5 minutes - builds under this can be finished for free
   },
 
   // Building queue

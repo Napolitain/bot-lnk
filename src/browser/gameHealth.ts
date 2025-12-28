@@ -2,16 +2,17 @@
  * Game-specific resilience - implements recovery and health checks for Lords & Knights
  */
 
-import { Page } from 'playwright';
-import { RecoveryAction, HealthChecker, HealthCheckResult, StateSnapshot } from '../resilience/index.js';
+import type { Page } from 'playwright';
+import type {
+  HealthChecker,
+  HealthCheckResult,
+  RecoveryAction,
+  StateSnapshot,
+} from '../resilience/index.js';
 import { dismissPopups } from './popups.js';
-import { saveDebugContext } from '../utils/index.js';
 
 /** Game URL patterns */
-const GAME_URL_PATTERNS = [
-  /lordsandknights\.com/,
-  /lnk\./,
-];
+const GAME_URL_PATTERNS = [/lordsandknights\.com/, /lnk\./];
 
 /** Overlay selectors that block interaction */
 const OVERLAY_SELECTORS = [
@@ -42,7 +43,7 @@ const VIEW_SELECTORS: Record<string, string> = {
 /** Check if on valid game URL */
 async function isOnGamePage(page: Page): Promise<boolean> {
   const url = page.url();
-  return GAME_URL_PATTERNS.some(pattern => pattern.test(url));
+  return GAME_URL_PATTERNS.some((pattern) => pattern.test(url));
 }
 
 /** Check for blocking overlays */
@@ -61,7 +62,9 @@ async function hasBlockingOverlay(page: Page): Promise<boolean> {
 }
 
 /** Check for error states */
-async function hasErrorState(page: Page): Promise<{ hasError: boolean; message?: string }> {
+async function hasErrorState(
+  page: Page,
+): Promise<{ hasError: boolean; message?: string }> {
   for (const { selector, type } of ERROR_SELECTORS) {
     try {
       const element = page.locator(selector);
@@ -90,11 +93,13 @@ async function hasExpectedView(page: Page, view: string): Promise<boolean> {
 }
 
 /** Create a health checker for the game page */
-export function createGameHealthChecker(expectedView?: string): HealthChecker<Page> {
+export function createGameHealthChecker(
+  expectedView?: string,
+): HealthChecker<Page> {
   return async (page: Page): Promise<HealthCheckResult> => {
     const issues: string[] = [];
 
-    if (!await isOnGamePage(page)) {
+    if (!(await isOnGamePage(page))) {
       issues.push(`Not on game page (URL: ${page.url()})`);
     }
 
@@ -102,7 +107,7 @@ export function createGameHealthChecker(expectedView?: string): HealthChecker<Pa
       issues.push('Blocking overlay detected');
     }
 
-    if (expectedView && !await hasExpectedView(page, expectedView)) {
+    if (expectedView && !(await hasExpectedView(page, expectedView))) {
       issues.push(`Expected ${expectedView} view not found`);
     }
 
@@ -152,7 +157,10 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
     {
       name: 'navigate_home',
       execute: async (page: Page) => {
-        await page.goto('https://lordsandknights.com/', { waitUntil: 'networkidle', timeout: 30000 });
+        await page.goto('https://lordsandknights.com/', {
+          waitUntil: 'networkidle',
+          timeout: 30000,
+        });
         await page.waitForTimeout(3000);
         await dismissPopups(page);
         return true;
@@ -163,7 +171,10 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
       execute: async (page: Page) => {
         const browserContext = page.context();
         await browserContext.clearCookies();
-        await page.goto('https://lordsandknights.com/', { waitUntil: 'networkidle', timeout: 30000 });
+        await page.goto('https://lordsandknights.com/', {
+          waitUntil: 'networkidle',
+          timeout: 30000,
+        });
         await page.waitForTimeout(3000);
         return true;
       },
@@ -172,7 +183,10 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
 }
 
 /** Create debug-saving failure handler */
-export function createDebugOnFailure(): (action: RecoveryAction<Page>, error: string) => Promise<void> {
+export function createDebugOnFailure(): (
+  action: RecoveryAction<Page>,
+  error: string,
+) => Promise<void> {
   return async (action, _error) => {
     // Note: We can't easily get the page here, so debug saving should be done at call site
     console.log(`[Recovery] Would save debug for: ${action.name}`);
@@ -182,7 +196,9 @@ export function createDebugOnFailure(): (action: RecoveryAction<Page>, error: st
 // ==================== State Snapshots ====================
 
 /** Create a state snapshot from time remaining */
-export function createTimeSnapshot(timeRemainingMs: number | null): StateSnapshot {
+export function createTimeSnapshot(
+  timeRemainingMs: number | null,
+): StateSnapshot {
   return {
     timestamp: Date.now(),
     signature: timeRemainingMs !== null ? String(timeRemainingMs) : 'null',
@@ -192,7 +208,10 @@ export function createTimeSnapshot(timeRemainingMs: number | null): StateSnapsho
 // ==================== Convenience Wrappers ====================
 
 /** Quick health check with optional view */
-export async function checkGameHealth(page: Page, expectedView?: string): Promise<HealthCheckResult> {
+export async function checkGameHealth(
+  page: Page,
+  expectedView?: string,
+): Promise<HealthCheckResult> {
   const checker = createGameHealthChecker(expectedView);
   return checker(page);
 }
@@ -203,7 +222,7 @@ export async function dismissIfOverlay(page: Page): Promise<boolean> {
     console.log('[Health] Overlay detected, dismissing...');
     await dismissPopups(page);
     await page.waitForTimeout(500);
-    return !await hasBlockingOverlay(page);
+    return !(await hasBlockingOverlay(page));
   }
   return true;
 }

@@ -1,8 +1,6 @@
-export { handleBuildingPhase } from './building.js';
 export type { BuildingPhaseResult } from './building.js';
-
-export { handleRecruitingPhase } from './recruiting.js';
+export { handleBuildingPhase } from './building.js';
 export type { RecruitingPhaseResult } from './recruiting.js';
-
-export { handleTradingPhase } from './trading.js';
+export { handleRecruitingPhase } from './recruiting.js';
 export type { TradingPhaseResult } from './trading.js';
+export { handleTradingPhase } from './trading.js';

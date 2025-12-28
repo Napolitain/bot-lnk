@@ -8,7 +8,10 @@ export class BotError extends Error {
 
 /** Error when solver communication fails */
 export class SolverError extends BotError {
-  constructor(message: string, public readonly castleName?: string) {
+  constructor(
+    message: string,
+    public readonly castleName?: string,
+  ) {
     super(castleName ? `[${castleName}] ${message}` : message);
     this.name = 'SolverError';
   }
@@ -34,7 +37,7 @@ export class LoginError extends BotError {
 export class ActionError extends BotError {
   constructor(
     public readonly action: 'upgrade' | 'recruit' | 'trade',
-    public readonly details: string
+    public readonly details: string,
   ) {
     super(`Failed to ${action}: ${details}`);
     this.name = 'ActionError';

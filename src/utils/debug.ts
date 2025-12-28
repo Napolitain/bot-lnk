@@ -1,6 +1,6 @@
-import { Page, Locator } from 'playwright';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import type { Locator, Page } from 'playwright';
 import { config } from '../config.js';
 
 /** Get HTML of element with parent and children context */
@@ -10,8 +10,10 @@ async function getElementContext(locator: Locator): Promise<string> {
     const elementHtml = await locator.evaluate((el) => {
       // Get parent HTML (limited depth)
       const parent = el.parentElement;
-      const parentInfo = parent ? `<!-- PARENT: ${parent.tagName}.${parent.className} -->\n` : '';
-      
+      const parentInfo = parent
+        ? `<!-- PARENT: ${parent.tagName}.${parent.className} -->\n`
+        : '';
+
       // Get element with all children
       return parentInfo + el.outerHTML;
     });
@@ -25,7 +27,7 @@ async function getElementContext(locator: Locator): Promise<string> {
 export async function dumpElementContext(
   page: Page,
   selector: string,
-  prefix: string
+  prefix: string,
 ): Promise<string | null> {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -33,7 +35,7 @@ export async function dumpElementContext(
     fs.mkdirSync(debugDir, { recursive: true });
 
     const locator = page.locator(selector).first();
-    const exists = await locator.count() > 0;
+    const exists = (await locator.count()) > 0;
 
     let content = `<!-- Debug dump: ${prefix} -->\n`;
     content += `<!-- Timestamp: ${new Date().toISOString()} -->\n`;
@@ -45,7 +47,10 @@ export async function dumpElementContext(
     } else {
       content += `<!-- Element not found with selector: ${selector} -->\n`;
       // Dump page body as fallback
-      const bodyHtml = await page.locator('body').innerHTML().catch(() => 'Failed to get body');
+      const bodyHtml = await page
+        .locator('body')
+        .innerHTML()
+        .catch(() => 'Failed to get body');
       content += `<!-- Page body (truncated to 5000 chars): -->\n`;
       content += bodyHtml.substring(0, 5000);
     }
@@ -64,12 +69,12 @@ export async function dumpElementContext(
 export async function saveDebugContext(
   page: Page,
   actionName: string,
-  selector?: string
+  selector?: string,
 ): Promise<{ screenshot: string | null; htmlDump: string | null }> {
   const { saveScreenshot } = await import('./screenshot.js');
-  
+
   const screenshot = await saveScreenshot(page, actionName);
-  const htmlDump = selector 
+  const htmlDump = selector
     ? await dumpElementContext(page, selector, actionName)
     : await dumpElementContext(page, 'body', actionName);
 

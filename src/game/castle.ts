@@ -1,17 +1,17 @@
-import { Page } from 'playwright';
+import type { Page } from 'playwright';
+import { dismissPopups } from '../browser/popups.js';
 import {
-  BuildingType,
+  type BuildingType,
+  type CastleConfig,
   ResourceType,
-  CastleConfig,
 } from '../generated/proto/config.js';
 import { BUILDING_NAME_TO_TYPE, BUILDING_TYPES } from './mappings.js';
-import { dismissPopups } from '../browser/popups.js';
 
 export interface BuildingUpgradeStatus {
   isUpgrading: boolean;
   targetLevel: number | null;
-  timeRemaining: string | null;  // e.g., "2 minutes"
-  timeRemainingMs: number | null;  // parsed milliseconds
+  timeRemaining: string | null; // e.g., "2 minutes"
+  timeRemainingMs: number | null; // parsed milliseconds
 }
 
 export interface CastleState {
@@ -19,23 +19,28 @@ export interface CastleState {
   config: CastleConfig;
   buildingCanUpgrade: Map<BuildingType, boolean>;
   buildingUpgradeStatus: Map<BuildingType, BuildingUpgradeStatus>;
-  upgradeQueueCount: number;  // number of buildings currently upgrading
+  upgradeQueueCount: number; // number of buildings currently upgrading
 }
 
 /** Parse time string like "2 minutes", "5 seconds", "1 hour" to milliseconds */
 function parseTimeToMs(timeStr: string): number | null {
   const match = timeStr.match(/(\d+)\s*(second|minute|hour|day)s?/i);
   if (!match) return null;
-  
+
   const value = parseInt(match[1], 10);
   const unit = match[2].toLowerCase();
-  
+
   switch (unit) {
-    case 'second': return value * 1000;
-    case 'minute': return value * 60 * 1000;
-    case 'hour': return value * 60 * 60 * 1000;
-    case 'day': return value * 24 * 60 * 60 * 1000;
-    default: return null;
+    case 'second':
+      return value * 1000;
+    case 'minute':
+      return value * 60 * 1000;
+    case 'hour':
+      return value * 60 * 60 * 1000;
+    case 'day':
+      return value * 24 * 60 * 60 * 1000;
+    default:
+      return null;
   }
 }
 
@@ -46,7 +51,9 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
   const castles: CastleState[] = [];
 
   // Get all castle rows (exclude header row)
-  const castleRows = page.locator('.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)');
+  const castleRows = page.locator(
+    '.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)',
+  );
   const rowCount = await castleRows.count();
 
   console.log(`Found ${rowCount} castle rows`);
@@ -55,15 +62,31 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
     const row = castleRows.nth(i);
 
     // Get castle name
-    const nameElement = row.locator('.tabular-habitat-title-cell--habitat-title');
-    const castleName = await nameElement.textContent() || `Castle ${i + 1}`;
+    const nameElement = row.locator(
+      '.tabular-habitat-title-cell--habitat-title',
+    );
+    const castleName = (await nameElement.textContent()) || `Castle ${i + 1}`;
 
     // Get castle resources from the resource row
-    const resourceAmounts = row.locator('.tabular-habitat-title-cell--resource-row .icon-amount--widget .amount');
-    const wood = parseInt(await resourceAmounts.nth(0).textContent() || '0', 10);
-    const stone = parseInt(await resourceAmounts.nth(1).textContent() || '0', 10);
-    const ore = parseInt(await resourceAmounts.nth(2).textContent() || '0', 10);
-    const food = parseInt(await resourceAmounts.nth(3).textContent() || '0', 10);
+    const resourceAmounts = row.locator(
+      '.tabular-habitat-title-cell--resource-row .icon-amount--widget .amount',
+    );
+    const wood = parseInt(
+      (await resourceAmounts.nth(0).textContent()) || '0',
+      10,
+    );
+    const stone = parseInt(
+      (await resourceAmounts.nth(1).textContent()) || '0',
+      10,
+    );
+    const ore = parseInt(
+      (await resourceAmounts.nth(2).textContent()) || '0',
+      10,
+    );
+    const food = parseInt(
+      (await resourceAmounts.nth(3).textContent()) || '0',
+      10,
+    );
 
     // Get buildings (each cell after the first is a building)
     const buildingCells = row.locator('.tabular-cell--upgrade-building');
@@ -71,7 +94,10 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
 
     const buildingLevels: { type: BuildingType; level: number }[] = [];
     const buildingCanUpgrade = new Map<BuildingType, boolean>();
-    const buildingUpgradeStatus = new Map<BuildingType, BuildingUpgradeStatus>();
+    const buildingUpgradeStatus = new Map<
+      BuildingType,
+      BuildingUpgradeStatus
+    >();
     let upgradeQueueCount = 0;
 
     for (let j = 0; j < buildingCount && j < BUILDING_TYPES.length; j++) {
@@ -94,11 +120,11 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
         upgradeQueueCount++;
 
         const constructionCell = upgradeCells.nth(1);
-        
+
         // Get time remaining from .complete div
         const completeDiv = constructionCell.locator('.complete');
-        if (await completeDiv.count() > 0) {
-          timeRemaining = await completeDiv.textContent() || null;
+        if ((await completeDiv.count()) > 0) {
+          timeRemaining = (await completeDiv.textContent()) || null;
           if (timeRemaining) {
             timeRemainingMs = parseTimeToMs(timeRemaining);
           }
@@ -106,7 +132,7 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
 
         // Get target level - it's in a div that's not .complete
         const levelDivs = constructionCell.locator('> div:not(.complete)');
-        if (await levelDivs.count() > 0) {
+        if ((await levelDivs.count()) > 0) {
           const targetLevelText = await levelDivs.first().textContent();
           targetLevel = parseInt(targetLevelText || '0', 10);
         }
@@ -117,11 +143,14 @@ export async function getCastles(page: Page): Promise<CastleState[]> {
       const currentLevel = parseInt(levelText || '0', 10);
 
       // Use target level if upgrading, otherwise current level
-      const effectiveLevel = isUpgrading && targetLevel ? targetLevel : currentLevel;
+      const effectiveLevel =
+        isUpgrading && targetLevel ? targetLevel : currentLevel;
 
       // Check if upgrade button exists and is enabled (use first() to avoid strict mode with multiple buttons)
       const upgradeBtn = firstCell.locator('button.button--action').first();
-      const canUpgrade = await upgradeBtn.count() > 0 && await upgradeBtn.isEnabled().catch(() => false);
+      const canUpgrade =
+        (await upgradeBtn.count()) > 0 &&
+        (await upgradeBtn.isEnabled().catch(() => false));
 
       buildingLevels.push({ type: buildingType, level: effectiveLevel });
       buildingCanUpgrade.set(buildingType, canUpgrade);

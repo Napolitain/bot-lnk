@@ -1,15 +1,15 @@
 import { createChannel, createClient } from 'nice-grpc';
-import {
-  BuildingAction,
-  ResearchAction,
-  UnitsRecommendation,
-  SolveRequest,
-  CastleSolverServiceDefinition,
-  CastleSolverServiceClient,
-} from '../generated/proto/config.js';
 import { config } from '../config.js';
-import { CastleState } from '../game/castle.js';
 import { SolverError } from '../errors/index.js';
+import type { CastleState } from '../game/castle.js';
+import {
+  type BuildingAction,
+  type CastleSolverServiceClient,
+  CastleSolverServiceDefinition,
+  type ResearchAction,
+  type SolveRequest,
+  type UnitsRecommendation,
+} from '../generated/proto/config.js';
 
 export interface SolverActions {
   nextAction?: BuildingAction;
@@ -24,7 +24,7 @@ export function createSolverClient(): CastleSolverServiceClient {
 
 export async function getNextActionsForCastle(
   client: CastleSolverServiceClient,
-  castle: CastleState
+  castle: CastleState,
 ): Promise<SolverActions> {
   const request: SolveRequest = {
     castleConfig: castle.config,

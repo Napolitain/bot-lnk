@@ -1,4 +1,4 @@
-import { Page } from 'playwright';
+import type { Page } from 'playwright';
 import { executeTrade } from '../../browser/actions.js';
 
 export interface TradingPhaseResult {
@@ -9,7 +9,7 @@ export interface TradingPhaseResult {
 export async function handleTradingPhase(
   page: Page,
   castleName: string,
-  castleIndex: number
+  castleIndex: number,
 ): Promise<TradingPhaseResult> {
   console.log(`\n[${castleName}] TRADING PHASE - Ready for silver trading!`);
 

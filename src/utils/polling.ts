@@ -17,7 +17,7 @@ export interface PollOptions {
  */
 export async function pollUntil(
   condition: () => Promise<boolean>,
-  options: PollOptions = {}
+  options: PollOptions = {},
 ): Promise<boolean> {
   const {
     timeout = 30000,
@@ -33,19 +33,23 @@ export async function pollUntil(
     try {
       if (await condition()) {
         if (attempts > 1) {
-          console.log(`[Poll] ${description} met after ${attempts} attempts (${Date.now() - startTime}ms)`);
+          console.log(
+            `[Poll] ${description} met after ${attempts} attempts (${Date.now() - startTime}ms)`,
+          );
         }
         return true;
       }
-    } catch (error) {
+    } catch (_error) {
       // Condition threw, treat as false
     }
 
     // Wait before next check
-    await new Promise(resolve => setTimeout(resolve, interval));
+    await new Promise((resolve) => setTimeout(resolve, interval));
   }
 
-  console.warn(`[Poll] ${description} not met after ${timeout}ms (${attempts} attempts)`);
+  console.warn(
+    `[Poll] ${description} not met after ${timeout}ms (${attempts} attempts)`,
+  );
   return false;
 }
 
@@ -55,13 +59,9 @@ export async function pollUntil(
  */
 export async function pollFor<T>(
   getter: () => Promise<T | null | undefined | false>,
-  options: PollOptions = {}
+  options: PollOptions = {},
 ): Promise<T | undefined> {
-  const {
-    timeout = 30000,
-    interval = 1000,
-    description = 'value',
-  } = options;
+  const { timeout = 30000, interval = 1000, description = 'value' } = options;
 
   const startTime = Date.now();
   let attempts = 0;
@@ -72,18 +72,22 @@ export async function pollFor<T>(
       const value = await getter();
       if (value !== null && value !== undefined && value !== false) {
         if (attempts > 1) {
-          console.log(`[Poll] ${description} met after ${attempts} attempts (${Date.now() - startTime}ms)`);
+          console.log(
+            `[Poll] ${description} met after ${attempts} attempts (${Date.now() - startTime}ms)`,
+          );
         }
         return value as T;
       }
-    } catch (error) {
+    } catch (_error) {
       // Getter threw, treat as not found
     }
 
-    await new Promise(resolve => setTimeout(resolve, interval));
+    await new Promise((resolve) => setTimeout(resolve, interval));
   }
 
-  console.warn(`[Poll] ${description} not met after ${timeout}ms (${attempts} attempts)`);
+  console.warn(
+    `[Poll] ${description} not met after ${timeout}ms (${attempts} attempts)`,
+  );
   return undefined;
 }
 
@@ -94,7 +98,7 @@ export async function pollFor<T>(
 export async function waitWithEarlyExit(
   shouldExit: () => Promise<boolean>,
   maxWaitMs: number,
-  intervalMs: number = 3000
+  intervalMs: number = 3000,
 ): Promise<{ exited: boolean; waitedMs: number }> {
   const startTime = Date.now();
 
@@ -110,7 +114,7 @@ export async function waitWithEarlyExit(
     const remaining = maxWaitMs - (Date.now() - startTime);
     const waitTime = Math.min(intervalMs, remaining);
     if (waitTime > 0) {
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
     }
   }
 

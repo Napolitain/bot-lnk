@@ -1,3 +1,8 @@
-export { saveScreenshot, formatError } from './screenshot.js';
 export { dumpElementContext, saveDebugContext } from './debug.js';
-export { pollUntil, pollFor, waitWithEarlyExit, type PollOptions } from './polling.js';
+export {
+  type PollOptions,
+  pollFor,
+  pollUntil,
+  waitWithEarlyExit,
+} from './polling.js';
+export { formatError, saveScreenshot } from './screenshot.js';

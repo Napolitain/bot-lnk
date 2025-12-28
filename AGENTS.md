@@ -242,3 +242,15 @@ sleepMs = clamp(sleepMs, minMs, maxMs);
 3. **Multi-castle coordination** - Currently sequential, could be smarter
 4. **Resource waiting** - Bot skips if disabled, could wait for resources
 5. **Research timing** - Only researches for first castle
+
+## Philosophy
+
+**Always favor state-of-the-art, edge tooling and practices.** This project aims to use the latest stable versions of all tools and follow modern idioms for 2025+:
+
+- TypeScript 5.9+ with strict mode
+- ESM modules (`"type": "module"`)
+- Biome for linting and formatting (replaces ESLint + Prettier)
+- Vitest for testing (replaces Jest)
+- tsx for direct TS execution (replaces ts-node)
+- Playwright for browser automation
+- nice-grpc for gRPC client

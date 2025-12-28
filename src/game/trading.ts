@@ -1,6 +1,6 @@
-import { Page } from 'playwright';
-import { UnitType, ResourceType } from '../generated/proto/config.js';
+import type { Page } from 'playwright';
 import { dismissPopups } from '../browser/popups.js';
+import { ResourceType, UnitType } from '../generated/proto/config.js';
 
 export interface TransportUnitSlider {
   unitType: UnitType;
@@ -17,8 +17,8 @@ export interface ResourceSlider {
 export interface TradeDialogState {
   silverCost: number;
   transportUnits: TransportUnitSlider[];
-  transportTime: string | null;  // e.g., "08:53:20"
-  returnTime: string | null;     // e.g., "12/27/2025, 10:33:47 PM"
+  transportTime: string | null; // e.g., "08:53:20"
+  returnTime: string | null; // e.g., "12/27/2025, 10:33:47 PM"
   capacityUsed: number;
   capacityMax: number;
   availableResources: ResourceSlider[];
@@ -57,20 +57,26 @@ function parseCapacity(text: string): { used: number; max: number } {
 }
 
 /** Read the current state of a trade/transport dialog */
-export async function readTradeDialogState(page: Page): Promise<TradeDialogState | null> {
+export async function readTradeDialogState(
+  page: Page,
+): Promise<TradeDialogState | null> {
   await dismissPopups(page);
 
   try {
     const dialog = page.locator('.menu--content-section');
-    if (await dialog.count() === 0) {
+    if ((await dialog.count()) === 0) {
       return null;
     }
 
     // Read silver cost
     let silverCost = 0;
-    const silverElement = dialog.locator('.icon-resource--6').first().locator('..').locator('.menu-list-element-basic--value');
-    if (await silverElement.count() > 0) {
-      const silverText = await silverElement.textContent() || '0';
+    const silverElement = dialog
+      .locator('.icon-resource--6')
+      .first()
+      .locator('..')
+      .locator('.menu-list-element-basic--value');
+    if ((await silverElement.count()) > 0) {
+      const silverText = (await silverElement.textContent()) || '0';
       silverCost = parseInt(silverText.replace(/[^\d]/g, ''), 10);
     }
 
@@ -83,22 +89,22 @@ export async function readTradeDialogState(page: Page): Promise<TradeDialogState
 
     for (let i = 0; i < unitSliderCount; i++) {
       const slider = unitSliders.nth(i);
-      
+
       // Get unit type from icon class
       const iconElement = slider.locator('[class*="icon-unit-"]').first();
-      const iconClass = await iconElement.getAttribute('class') || '';
+      const iconClass = (await iconElement.getAttribute('class')) || '';
       const unitMatch = iconClass.match(/icon-unit-(\d+)/);
       if (!unitMatch) continue;
-      
+
       const unitType = ICON_TO_UNIT_TYPE[unitMatch[1]] || UnitType.UNIT_UNKNOWN;
-      
+
       // Get current amount from input
       const input = slider.locator('input.component--input');
-      const currentAmount = parseInt(await input.inputValue() || '0', 10);
-      
+      const currentAmount = parseInt((await input.inputValue()) || '0', 10);
+
       // Get max available from the increase button text
       const maxBtn = slider.locator('.seek-bar-increase-value--button');
-      const maxText = await maxBtn.textContent() || '0';
+      const maxText = (await maxBtn.textContent()) || '0';
       const maxAvailable = parseInt(maxText, 10);
 
       transportUnits.push({ unitType, currentAmount, maxAvailable });
@@ -106,24 +112,34 @@ export async function readTradeDialogState(page: Page): Promise<TradeDialogState
 
     // Read transport time
     let transportTime: string | null = null;
-    const transportTimeElement = dialog.locator('.icon-duration').locator('..').locator('.menu-list-element-basic--value');
-    if (await transportTimeElement.count() > 0) {
-      transportTime = (await transportTimeElement.textContent())?.trim() || null;
+    const transportTimeElement = dialog
+      .locator('.icon-duration')
+      .locator('..')
+      .locator('.menu-list-element-basic--value');
+    if ((await transportTimeElement.count()) > 0) {
+      transportTime =
+        (await transportTimeElement.textContent())?.trim() || null;
     }
 
     // Read return time
     let returnTime: string | null = null;
-    const returnTimeElement = dialog.locator('.icon-day-icon').locator('..').locator('.menu-list-element-basic--value');
-    if (await returnTimeElement.count() > 0) {
+    const returnTimeElement = dialog
+      .locator('.icon-day-icon')
+      .locator('..')
+      .locator('.menu-list-element-basic--value');
+    if ((await returnTimeElement.count()) > 0) {
       returnTime = (await returnTimeElement.textContent())?.trim() || null;
     }
 
     // Read capacity
     let capacityUsed = 0;
     let capacityMax = 0;
-    const capacityElement = dialog.locator('.icon-capacity').locator('..').locator('.menu-list-element-basic--value');
-    if (await capacityElement.count() > 0) {
-      const capacityText = await capacityElement.textContent() || '';
+    const capacityElement = dialog
+      .locator('.icon-capacity')
+      .locator('..')
+      .locator('.menu-list-element-basic--value');
+    if ((await capacityElement.count()) > 0) {
+      const capacityText = (await capacityElement.textContent()) || '';
       const parsed = parseCapacity(capacityText);
       capacityUsed = parsed.used;
       capacityMax = parsed.max;
@@ -138,22 +154,24 @@ export async function readTradeDialogState(page: Page): Promise<TradeDialogState
 
     for (let i = 0; i < resourceSliderCount; i++) {
       const slider = resourceSliders.nth(i);
-      
+
       // Get resource type from icon class
       const iconElement = slider.locator('[class*="icon-resource--"]').first();
-      const iconClass = await iconElement.getAttribute('class') || '';
+      const iconClass = (await iconElement.getAttribute('class')) || '';
       const resourceMatch = iconClass.match(/icon-resource--(\d+)/);
       if (!resourceMatch) continue;
-      
-      const resourceType = ICON_TO_RESOURCE_TYPE[resourceMatch[1]] || ResourceType.RESOURCE_UNKNOWN;
-      
+
+      const resourceType =
+        ICON_TO_RESOURCE_TYPE[resourceMatch[1]] ||
+        ResourceType.RESOURCE_UNKNOWN;
+
       // Get current amount from input
       const input = slider.locator('input.component--input');
-      const currentAmount = parseInt(await input.inputValue() || '0', 10);
-      
+      const currentAmount = parseInt((await input.inputValue()) || '0', 10);
+
       // Get max available from the increase button text
       const maxBtn = slider.locator('.seek-bar-increase-value--button');
-      const maxText = await maxBtn.textContent() || '0';
+      const maxText = (await maxBtn.textContent()) || '0';
       const maxAvailable = parseInt(maxText, 10);
 
       availableResources.push({ resourceType, currentAmount, maxAvailable });
@@ -162,11 +180,15 @@ export async function readTradeDialogState(page: Page): Promise<TradeDialogState
     // Read target silver (e.g., "704/2,000")
     let targetSilver = 0;
     let targetSilverMax = 0;
-    const targetSilverElement = dialog.locator('.menu-list-element-basic').filter({
-      hasText: 'Silver',
-    }).last().locator('.menu-list-element-basic--value');
-    if (await targetSilverElement.count() > 0) {
-      const targetText = await targetSilverElement.textContent() || '';
+    const targetSilverElement = dialog
+      .locator('.menu-list-element-basic')
+      .filter({
+        hasText: 'Silver',
+      })
+      .last()
+      .locator('.menu-list-element-basic--value');
+    if ((await targetSilverElement.count()) > 0) {
+      const targetText = (await targetSilverElement.textContent()) || '';
       const parsed = parseCapacity(targetText);
       targetSilver = parsed.used;
       targetSilverMax = parsed.max;

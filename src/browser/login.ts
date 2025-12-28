@@ -1,7 +1,7 @@
-import { Page } from 'playwright';
+import type { Page } from 'playwright';
 import { config } from '../config.js';
+import { pollFor, pollUntil, saveDebugContext } from '../utils/index.js';
 import { dismissPopups } from './popups.js';
-import { saveDebugContext, pollUntil, pollFor } from '../utils/index.js';
 
 async function isInGame(page: Page): Promise<boolean> {
   // Check multiple indicators that we're in the game - use short timeouts for polling
@@ -13,7 +13,9 @@ async function isInGame(page: Page): Promise<boolean> {
     }
 
     // Check for buildings button (most reliable indicator)
-    const buildingsBtn = page.getByRole('button', { name: 'Current building upgrades' });
+    const buildingsBtn = page.getByRole('button', {
+      name: 'Current building upgrades',
+    });
     if (await buildingsBtn.isVisible({ timeout: 500 }).catch(() => false)) {
       return true;
     }
@@ -36,9 +38,12 @@ async function isInGame(page: Page): Promise<boolean> {
   }
 }
 
-async function waitForGameLoad(page: Page, timeoutMs = 30000): Promise<boolean> {
+async function waitForGameLoad(
+  page: Page,
+  timeoutMs = 30000,
+): Promise<boolean> {
   console.log('[Login] Waiting for game to load...');
-  
+
   const loaded = await pollUntil(
     async () => {
       await dismissPopups(page);
@@ -46,7 +51,9 @@ async function waitForGameLoad(page: Page, timeoutMs = 30000): Promise<boolean> 
       if (inGame) {
         // Double-check we're really in game and not on login
         const loginScene = page.locator('.login-scene');
-        const stillOnLogin = await loginScene.isVisible({ timeout: 300 }).catch(() => false);
+        const stillOnLogin = await loginScene
+          .isVisible({ timeout: 300 })
+          .catch(() => false);
         if (stillOnLogin) {
           console.log('[Login] Still on login scene, not in game yet');
           return false;
@@ -55,7 +62,7 @@ async function waitForGameLoad(page: Page, timeoutMs = 30000): Promise<boolean> 
       }
       return false;
     },
-    { timeout: timeoutMs, interval: 1000, description: 'game load' }
+    { timeout: timeoutMs, interval: 1000, description: 'game load' },
   );
 
   if (loaded) {
@@ -102,7 +109,9 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
     return false;
   }
 
-  console.log(`[Login] Checking state (attempt ${retryCount + 1}/${config.maxLoginRetries})...`);
+  console.log(
+    `[Login] Checking state (attempt ${retryCount + 1}/${config.maxLoginRetries})...`,
+  );
   console.log(`[Login] Current URL: ${page.url()}`);
 
   // Navigate to game if not already there
@@ -110,7 +119,10 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
   if (!currentUrl.includes('lordsandknights.com')) {
     console.log('[Login] Not on game site, navigating...');
     try {
-      await page.goto('https://lordsandknights.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.goto('https://lordsandknights.com/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
       await page.waitForTimeout(3000);
       console.log(`[Login] Navigated to: ${page.url()}`);
     } catch (error) {
@@ -149,7 +161,9 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
       await page.getByRole('textbox', { name: 'Email' }).click();
       await page.getByRole('textbox', { name: 'Email' }).fill(config.email);
       await page.getByRole('textbox', { name: 'Password' }).click();
-      await page.getByRole('textbox', { name: 'Password' }).fill(config.password);
+      await page
+        .getByRole('textbox', { name: 'Password' })
+        .fill(config.password);
       await page.getByRole('button', { name: 'Log in' }).click();
 
       await page.waitForTimeout(3000);
@@ -182,27 +196,31 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
     try {
       const playNowBtn = page.getByText('PLAY NOW');
       await playNowBtn.click();
-      
+
       // Wait for the login scene to disappear (indicates transition started)
       console.log('[Login] Waiting for login scene to disappear...');
       const loginGone = await pollUntil(
         async () => {
           const loginScene = page.locator('.login-scene');
-          const isVisible = await loginScene.isVisible({ timeout: 300 }).catch(() => false);
+          const isVisible = await loginScene
+            .isVisible({ timeout: 300 })
+            .catch(() => false);
           return !isVisible;
         },
-        { timeout: 15000, interval: 500, description: 'login scene disappear' }
+        { timeout: 15000, interval: 500, description: 'login scene disappear' },
       );
-      
+
       if (!loginGone) {
-        console.warn('[Login] Login scene did not disappear after PLAY NOW click');
+        console.warn(
+          '[Login] Login scene did not disappear after PLAY NOW click',
+        );
         await saveDebugContext(page, 'login-scene-stuck');
         // Try clicking again
         console.log('[Login] Retrying PLAY NOW click...');
         await playNowBtn.click({ force: true });
         await page.waitForTimeout(2000);
       }
-      
+
       // Wait for server select or game load with polling
       const serverOrGame = await pollFor<'game' | 'server'>(
         async () => {
@@ -211,7 +229,11 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
           if (await isOnServerSelect(page)) return 'server';
           return null;
         },
-        { timeout: 15000, interval: 1000, description: 'server select or game' }
+        {
+          timeout: 15000,
+          interval: 1000,
+          description: 'server select or game',
+        },
       );
 
       if (serverOrGame === 'game') {
@@ -223,16 +245,22 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
         console.log('[Login] Selecting server...');
         const serverBtn = page.getByText(config.server);
         await serverBtn.click();
-        
+
         // Wait for server button to disappear
         const serverGone = await pollUntil(
           async () => {
-            const isVisible = await serverBtn.isVisible({ timeout: 300 }).catch(() => false);
+            const isVisible = await serverBtn
+              .isVisible({ timeout: 300 })
+              .catch(() => false);
             return !isVisible;
           },
-          { timeout: 10000, interval: 500, description: 'server button disappear' }
+          {
+            timeout: 10000,
+            interval: 500,
+            description: 'server button disappear',
+          },
         );
-        
+
         if (!serverGone) {
           console.warn('[Login] Server button did not disappear after click');
           await saveDebugContext(page, 'server-select-stuck');
@@ -249,15 +277,18 @@ export async function login(page: Page, retryCount = 0): Promise<boolean> {
   // Unknown state - dump debug and retry
   console.warn(`[Login] Unknown page state, dumping debug info...`);
   await saveDebugContext(page, 'login-unknown-state');
-  
+
   // Clear cache and cookies to start fresh
   console.log('[Login] Clearing cookies and reloading...');
   const context = page.context();
   await context.clearCookies();
-  
+
   // Navigate fresh
-  await page.goto('https://lordsandknights.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto('https://lordsandknights.com/', {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000,
+  });
   await page.waitForTimeout(3000);
-  
+
   return await login(page, retryCount + 1);
 }

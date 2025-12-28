@@ -1,4 +1,8 @@
-import { UnitType, UnitsRecommendation, UnitCount } from '../generated/proto/config.js';
+import type {
+  UnitCount,
+  UnitsRecommendation,
+  UnitType,
+} from '../generated/proto/config.js';
 
 /** Castle phase: what should we do for this castle */
 export enum CastlePhase {
@@ -16,7 +20,7 @@ export interface PhaseResult {
 /** Determine what phase a castle is in based on solver response and current units */
 export function determineCastlePhase(
   unitsRecommendation: UnitsRecommendation | undefined,
-  currentUnits: UnitCount[] | undefined
+  currentUnits: UnitCount[] | undefined,
 ): PhaseResult {
   const missingUnits = new Map<UnitType, number>();
 
@@ -57,9 +61,12 @@ export function determineCastlePhase(
 /** Compare current units to recommended and return deficit */
 export function compareUnits(
   currentUnits: UnitCount[] | undefined,
-  recommendation: UnitsRecommendation
+  recommendation: UnitsRecommendation,
 ): Map<UnitType, { current: number; recommended: number; deficit: number }> {
-  const result = new Map<UnitType, { current: number; recommended: number; deficit: number }>();
+  const result = new Map<
+    UnitType,
+    { current: number; recommended: number; deficit: number }
+  >();
 
   const currentMap = new Map<UnitType, number>();
   if (currentUnits) {

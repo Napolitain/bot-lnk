@@ -1,7 +1,7 @@
-import { Page } from 'playwright';
-import { UnitType } from '../generated/proto/config.js';
-import { UNIT_TYPES } from './mappings.js';
+import type { Page } from 'playwright';
 import { dismissPopups } from '../browser/popups.js';
+import type { UnitType } from '../generated/proto/config.js';
+import { UNIT_TYPES } from './mappings.js';
 
 export interface UnitCount {
   type: UnitType;
@@ -20,7 +20,9 @@ export async function getUnits(page: Page): Promise<CastleUnits[]> {
   const castleUnits: CastleUnits[] = [];
 
   // Get all castle rows (exclude header row)
-  const castleRows = page.locator('.table--global-overview--recruitment .tabular-row:not(.global-overview--table--header)');
+  const castleRows = page.locator(
+    '.table--global-overview--recruitment .tabular-row:not(.global-overview--table--header)',
+  );
   const rowCount = await castleRows.count();
 
   console.log(`Found ${rowCount} castle rows for recruitment`);
@@ -29,8 +31,10 @@ export async function getUnits(page: Page): Promise<CastleUnits[]> {
     const row = castleRows.nth(i);
 
     // Get castle name
-    const nameElement = row.locator('.tabular-habitat-title-cell--habitat-title');
-    const castleName = await nameElement.textContent() || `Castle ${i + 1}`;
+    const nameElement = row.locator(
+      '.tabular-habitat-title-cell--habitat-title',
+    );
+    const castleName = (await nameElement.textContent()) || `Castle ${i + 1}`;
 
     // Get unit cells
     const unitCells = row.locator('.tabular-cell--recruitment');
@@ -43,14 +47,19 @@ export async function getUnits(page: Page): Promise<CastleUnits[]> {
       const recruitmentCell = cell.locator('.recruitment--cell');
 
       // Get current unit count from .centered.last div
-      const countDiv = recruitmentCell.locator('.tabular-cell--input-container .centered.last');
-      const countText = await countDiv.textContent() || '0';
+      const countDiv = recruitmentCell.locator(
+        '.tabular-cell--input-container .centered.last',
+      );
+      const countText = (await countDiv.textContent()) || '0';
       const count = parseInt(countText, 10);
 
       // Check if recruit button is enabled
-      const recruitBtn = recruitmentCell.locator('button.button--action').last();
-      const canRecruit = await recruitBtn.count() > 0 && 
-        !(await recruitBtn.evaluate(el => el.classList.contains('disabled')));
+      const recruitBtn = recruitmentCell
+        .locator('button.button--action')
+        .last();
+      const canRecruit =
+        (await recruitBtn.count()) > 0 &&
+        !(await recruitBtn.evaluate((el) => el.classList.contains('disabled')));
 
       units.push({
         type: UNIT_TYPES[j],

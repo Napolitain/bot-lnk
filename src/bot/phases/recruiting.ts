@@ -1,6 +1,6 @@
-import { Page } from 'playwright';
-import { UnitType, unitTypeToJSON } from '../../generated/proto/config.js';
+import type { Page } from 'playwright';
 import { recruitUnits } from '../../browser/actions.js';
+import { type UnitType, unitTypeToJSON } from '../../generated/proto/config.js';
 
 export interface RecruitingPhaseResult {
   recruited: boolean;
@@ -11,7 +11,7 @@ export async function handleRecruitingPhase(
   page: Page,
   castleName: string,
   castleIndex: number,
-  missingUnits: Map<UnitType, number>
+  missingUnits: Map<UnitType, number>,
 ): Promise<RecruitingPhaseResult> {
   console.log(`\n[${castleName}] RECRUITING PHASE`);
 

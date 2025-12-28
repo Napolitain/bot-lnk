@@ -11,7 +11,9 @@ export interface HealthCheckResult {
 }
 
 /** A health checker function */
-export type HealthChecker<TContext> = (ctx: TContext) => Promise<HealthCheckResult>;
+export type HealthChecker<TContext> = (
+  ctx: TContext,
+) => Promise<HealthCheckResult>;
 
 /** Result of a recovery attempt */
 export interface RecoveryResult {

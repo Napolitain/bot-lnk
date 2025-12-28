@@ -3,13 +3,13 @@
  * No dependencies on Playwright or game-specific code
  */
 
-import {
+import type {
   HealthChecker,
   HealthCheckResult,
+  PollOptions,
   RecoveryAction,
   RecoveryResult,
   RetryOptions,
-  PollOptions,
   StaleCheckResult,
   StateSnapshot,
 } from './types.js';
@@ -19,7 +19,7 @@ import {
  */
 export async function pollUntil(
   condition: () => Promise<boolean>,
-  options: PollOptions
+  options: PollOptions,
 ): Promise<boolean> {
   const { timeoutMs, intervalMs, description = 'condition' } = options;
   const startTime = Date.now();
@@ -34,10 +34,12 @@ export async function pollUntil(
     } catch {
       // Condition threw, treat as false
     }
-    await new Promise(resolve => setTimeout(resolve, intervalMs));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  console.warn(`[Poll] ${description} not met after ${timeoutMs}ms (${attempts} attempts)`);
+  console.warn(
+    `[Poll] ${description} not met after ${timeoutMs}ms (${attempts} attempts)`,
+  );
   return false;
 }
 
@@ -46,7 +48,7 @@ export async function pollUntil(
  */
 export async function pollFor<T>(
   getter: () => Promise<T | null | undefined>,
-  options: PollOptions
+  options: PollOptions,
 ): Promise<T | undefined> {
   const { timeoutMs, intervalMs, description = 'value' } = options;
   const startTime = Date.now();
@@ -60,7 +62,7 @@ export async function pollFor<T>(
     } catch {
       // Continue
     }
-    await new Promise(resolve => setTimeout(resolve, intervalMs));
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
   console.warn(`[Poll] ${description} not found after ${timeoutMs}ms`);
@@ -72,9 +74,14 @@ export async function pollFor<T>(
  */
 export async function retry<T>(
   action: () => Promise<T>,
-  options: RetryOptions
+  options: RetryOptions,
 ): Promise<{ success: boolean; result?: T; error?: string; attempts: number }> {
-  const { maxAttempts, delayMs, backoffMultiplier = 1, maxDelayMs = 60000 } = options;
+  const {
+    maxAttempts,
+    delayMs,
+    backoffMultiplier = 1,
+    maxDelayMs = 60000,
+  } = options;
   let currentDelay = delayMs;
   let lastError = '';
 
@@ -84,9 +91,9 @@ export async function retry<T>(
       return { success: true, result, attempts: attempt };
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
-      
+
       if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, currentDelay));
+        await new Promise((resolve) => setTimeout(resolve, currentDelay));
         currentDelay = Math.min(currentDelay * backoffMultiplier, maxDelayMs);
       }
     }
@@ -101,14 +108,21 @@ export async function retry<T>(
 export async function escalatingRecovery<TContext>(
   ctx: TContext,
   actions: RecoveryAction<TContext>[],
-  onFailure?: (action: RecoveryAction<TContext>, error: string) => Promise<void>
+  onFailure?: (
+    action: RecoveryAction<TContext>,
+    error: string,
+  ) => Promise<void>,
 ): Promise<RecoveryResult> {
   for (const action of actions) {
     console.log(`[Recovery] Attempting: ${action.name}`);
     try {
       const success = await action.execute(ctx);
       if (success) {
-        return { success: true, strategyUsed: action.name, message: 'Recovery successful' };
+        return {
+          success: true,
+          strategyUsed: action.name,
+          message: 'Recovery successful',
+        };
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -119,7 +133,11 @@ export async function escalatingRecovery<TContext>(
     }
   }
 
-  return { success: false, strategyUsed: 'none', message: 'All recovery strategies exhausted' };
+  return {
+    success: false,
+    strategyUsed: 'none',
+    message: 'All recovery strategies exhausted',
+  };
 }
 
 /**
@@ -128,10 +146,13 @@ export async function escalatingRecovery<TContext>(
 export async function waitForHealthy<TContext>(
   ctx: TContext,
   checker: HealthChecker<TContext>,
-  options: RetryOptions
+  options: RetryOptions,
 ): Promise<HealthCheckResult> {
   const { maxAttempts, delayMs } = options;
-  let lastResult: HealthCheckResult = { healthy: false, issues: ['Not checked'] };
+  let lastResult: HealthCheckResult = {
+    healthy: false,
+    issues: ['Not checked'],
+  };
 
   for (let i = 0; i < maxAttempts; i++) {
     try {
@@ -144,7 +165,7 @@ export async function waitForHealthy<TContext>(
     }
 
     if (i < maxAttempts - 1) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
 
@@ -158,16 +179,19 @@ export function checkStale(
   previous: StateSnapshot | null,
   current: StateSnapshot,
   expectedChangeMs: number,
-  tolerance = 0.5
+  tolerance = 0.5,
 ): StaleCheckResult {
   if (!previous) {
     return { isStale: false };
   }
 
   const timePassed = current.timestamp - previous.timestamp;
-  
+
   // If same signature after significant time, data is stale
-  if (previous.signature === current.signature && timePassed > expectedChangeMs * tolerance) {
+  if (
+    previous.signature === current.signature &&
+    timePassed > expectedChangeMs * tolerance
+  ) {
     return {
       isStale: true,
       reason: `State unchanged after ${Math.round(timePassed / 1000)}s (expected change after ${Math.round(expectedChangeMs / 1000)}s)`,
@@ -184,7 +208,7 @@ export async function withRecovery<TContext, T>(
   ctx: TContext,
   action: () => Promise<T>,
   recoveryActions: RecoveryAction<TContext>[],
-  defaultValue: T
+  defaultValue: T,
 ): Promise<T> {
   try {
     return await action();
@@ -193,12 +217,12 @@ export async function withRecovery<TContext, T>(
     console.warn(`[withRecovery] Action failed: ${errorMsg}`);
 
     const recovery = await escalatingRecovery(ctx, recoveryActions);
-    
+
     if (recovery.success) {
       // Retry action after recovery
       try {
         return await action();
-      } catch (retryError) {
+      } catch (_retryError) {
         console.warn(`[withRecovery] Retry after recovery failed`);
       }
     }

@@ -1,10 +1,10 @@
 import { chromium } from 'playwright';
-import { config, validateConfig } from './config.js';
 import { runBotLoop } from './bot/index.js';
+import { createTimeSnapshot, forceRefresh } from './browser/gameHealth.js';
 import { createSolverClient } from './client/solver.js';
+import { config, validateConfig } from './config.js';
+import { checkStale, type StateSnapshot } from './resilience/index.js';
 import { formatError } from './utils/index.js';
-import { forceRefresh, createTimeSnapshot } from './browser/gameHealth.js';
-import { checkStale, StateSnapshot } from './resilience/index.js';
 
 async function main() {
   // Validate config
@@ -22,20 +22,19 @@ async function main() {
   ];
 
   // Minimal args for headful mode (more natural)
-  const headfulArgs = [
-    '--disable-blink-features=AutomationControlled',
-  ];
+  const headfulArgs = ['--disable-blink-features=AutomationControlled'];
 
   const context = await chromium.launchPersistentContext(config.userDataDir, {
     headless: config.headless,
     viewport: { width: 1920, height: 1080 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     locale: 'en-US',
     colorScheme: 'light',
     args: config.headless ? headlessArgs : headfulArgs,
   });
 
-  const page = context.pages()[0] || await context.newPage();
+  const page = context.pages()[0] || (await context.newPage());
 
   // Hide automation markers
   await page.addInitScript(() => {
@@ -68,13 +67,19 @@ async function main() {
     const result = await runBotLoop(page, solverClient);
 
     if (!result.success) {
-      console.warn(`[Main] Cycle completed with issues: ${result.error || 'unknown'}`);
+      console.warn(
+        `[Main] Cycle completed with issues: ${result.error || 'unknown'}`,
+      );
     }
 
     // Create snapshot and check for stale data
     const currentSnapshot = createTimeSnapshot(result.sleepMs);
-    const staleCheck = checkStale(lastSnapshot, currentSnapshot, result.sleepMs ?? 60000);
-    
+    const staleCheck = checkStale(
+      lastSnapshot,
+      currentSnapshot,
+      result.sleepMs ?? 60000,
+    );
+
     if (staleCheck.isStale) {
       console.warn(`[Main] ${staleCheck.reason}`);
       await forceRefresh(page);
@@ -90,11 +95,13 @@ async function main() {
 
     // Use suggested sleep time if available, otherwise use default interval
     const sleepMs = result.sleepMs ?? config.loopIntervalMs;
-    console.log(`\nWaiting ${Math.round(sleepMs / 1000)} seconds before next check...`);
-    
+    console.log(
+      `\nWaiting ${Math.round(sleepMs / 1000)} seconds before next check...`,
+    );
+
     try {
       await page.waitForTimeout(sleepMs);
-    } catch (error) {
+    } catch (_error) {
       // Page might be closed, try to recover
       console.warn('[Main] Sleep interrupted, attempting to continue...');
     }

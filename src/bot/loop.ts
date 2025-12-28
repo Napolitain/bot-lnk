@@ -1,18 +1,51 @@
-import { Page } from 'playwright';
-import { Technology, technologyToJSON, CastleSolverServiceClient } from '../generated/proto/config.js';
-import { dismissPopups } from '../browser/popups.js';
-import { navigateToBuildingsView, navigateToRecruitmentView, navigateToTradingView } from '../browser/navigation.js';
+import type { Page } from 'playwright';
+import {
+  clickFreeFinishButtons,
+  researchTechnology,
+} from '../browser/actions.js';
+import {
+  checkGameHealth,
+  createGameHealthChecker,
+  createGameRecoveryActions,
+} from '../browser/gameHealth.js';
 import { login } from '../browser/login.js';
-import { researchTechnology, clickFreeFinishButtons } from '../browser/actions.js';
-import { checkGameHealth, createGameRecoveryActions, createGameHealthChecker } from '../browser/gameHealth.js';
-import { escalatingRecovery, withRecovery, waitForHealthy } from '../resilience/index.js';
-import { getCastles, CastleState } from '../game/castle.js';
-import { getUnits } from '../game/units.js';
-import { getNextActionsForCastle } from '../client/solver.js';
+import {
+  navigateToBuildingsView,
+  navigateToRecruitmentView,
+  navigateToTradingView,
+} from '../browser/navigation.js';
+import { dismissPopups } from '../browser/popups.js';
+import {
+  getNextActionsForCastle,
+  type SolverActions,
+} from '../client/solver.js';
 import { config } from '../config.js';
 import { determineCastlePhase } from '../domain/index.js';
-import { handleBuildingPhase, handleRecruitingPhase, handleTradingPhase } from './phases/index.js';
-import { printCastleStatus, printUnitsRecommendation, printUnitComparison, printCycleSummary, printSleepInfo } from './display.js';
+import { type CastleState, getCastles } from '../game/castle.js';
+import { getUnits } from '../game/units.js';
+import {
+  type CastleSolverServiceClient,
+  Technology,
+  technologyToJSON,
+  type UnitsRecommendation,
+} from '../generated/proto/config.js';
+import {
+  escalatingRecovery,
+  waitForHealthy,
+  withRecovery,
+} from '../resilience/index.js';
+import {
+  printCastleStatus,
+  printCycleSummary,
+  printSleepInfo,
+  printUnitComparison,
+  printUnitsRecommendation,
+} from './display.js';
+import {
+  handleBuildingPhase,
+  handleRecruitingPhase,
+  handleTradingPhase,
+} from './phases/index.js';
 
 /** Game-specific recovery actions */
 const gameRecoveryActions = createGameRecoveryActions();
@@ -44,16 +77,19 @@ export interface BotLoopResult {
 }
 
 /** Main bot loop - NEVER throws, always returns a result */
-export async function runBotLoop(page: Page, solverClient: CastleSolverServiceClient): Promise<BotLoopResult> {
+export async function runBotLoop(
+  page: Page,
+  solverClient: CastleSolverServiceClient,
+): Promise<BotLoopResult> {
   try {
     return await runBotLoopInternal(page, solverClient);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[Loop] Unexpected error: ${errorMsg}`);
-    
+
     // Try to recover
     await escalatingRecovery(page, gameRecoveryActions);
-    
+
     return {
       success: false,
       sleepMs: config.retryDelayMs,
@@ -63,19 +99,28 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
 }
 
 /** Internal bot loop implementation */
-async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceClient): Promise<BotLoopResult> {
+async function runBotLoopInternal(
+  page: Page,
+  solverClient: CastleSolverServiceClient,
+): Promise<BotLoopResult> {
   // Always ensure we're on the game site first
   const currentUrl = page.url();
   console.log(`[Loop] Current URL: ${currentUrl}`);
-  
-  if (currentUrl === 'about:blank' || !currentUrl.includes('lordsandknights.com')) {
+
+  if (
+    currentUrl === 'about:blank' ||
+    !currentUrl.includes('lordsandknights.com')
+  ) {
     console.log('[Loop] Not on game site, navigating...');
     try {
-      await page.goto('https://lordsandknights.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.goto('https://lordsandknights.com/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
+      });
       // Wait for page to stabilize
       await page.waitForTimeout(5000);
       console.log(`[Loop] Navigated to: ${page.url()}`);
-    } catch (error) {
+    } catch (_error) {
       console.warn('[Loop] Navigation failed, attempting recovery...');
       await escalatingRecovery(page, gameRecoveryActions);
       // Give it another moment after recovery
@@ -87,18 +132,29 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   await dismissPopups(page);
 
   // Ensure we're logged in (this handles navigation and server selection)
-  const loggedIn = await withRecovery(page, () => login(page), gameRecoveryActions, false);
+  const loggedIn = await withRecovery(
+    page,
+    () => login(page),
+    gameRecoveryActions,
+    false,
+  );
   if (!loggedIn) {
     console.warn('[Loop] Login failed, dumping debug...');
     const { saveDebugContext } = await import('../utils/debug.js');
     await saveDebugContext(page, 'login-failed-in-loop');
-    return { success: false, sleepMs: config.retryDelayMs, error: 'Login failed' };
+    return {
+      success: false,
+      sleepMs: config.retryDelayMs,
+      error: 'Login failed',
+    };
   }
 
   // Health check after login (non-blocking)
   const initialHealth = await checkGameHealth(page);
   if (!initialHealth.healthy) {
-    console.warn(`[Health] Issues detected: ${initialHealth.issues.join(', ')}`);
+    console.warn(
+      `[Health] Issues detected: ${initialHealth.issues.join(', ')}`,
+    );
     await dismissPopups(page);
     // Don't fail, just continue
   }
@@ -108,30 +164,49 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
     page,
     () => navigateToBuildingsView(page),
     gameRecoveryActions,
-    false
+    false,
   );
-  
+
   if (!onBuildings) {
     console.warn('[Loop] Could not navigate to buildings, dumping debug...');
     const { saveDebugContext } = await import('../utils/debug.js');
     await saveDebugContext(page, 'buildings-navigation-failed');
-    return { success: false, sleepMs: config.retryDelayMs, error: 'Navigation failed' };
+    return {
+      success: false,
+      sleepMs: config.retryDelayMs,
+      error: 'Navigation failed',
+    };
   }
 
   // Health check after navigation (non-blocking)
-  const buildingsHealth = await waitForHealthy(page, createGameHealthChecker('buildings'), { maxAttempts: 2, delayMs: 1000 });
+  const buildingsHealth = await waitForHealthy(
+    page,
+    createGameHealthChecker('buildings'),
+    { maxAttempts: 2, delayMs: 1000 },
+  );
   if (!buildingsHealth.healthy) {
-    console.warn(`[Health] Buildings view issues: ${buildingsHealth.issues.join(', ')}`);
+    console.warn(
+      `[Health] Buildings view issues: ${buildingsHealth.issues.join(', ')}`,
+    );
   }
 
   // Read all castles
-  const castles = await withRecovery(page, () => getCastles(page), gameRecoveryActions, []);
-  
+  const castles = await withRecovery(
+    page,
+    () => getCastles(page),
+    gameRecoveryActions,
+    [],
+  );
+
   if (castles.length === 0) {
     console.warn('[Loop] No castles found, dumping debug...');
     const { saveDebugContext } = await import('../utils/debug.js');
     await saveDebugContext(page, 'no-castles-found');
-    return { success: false, sleepMs: config.retryDelayMs, error: 'No castles found' };
+    return {
+      success: false,
+      sleepMs: config.retryDelayMs,
+      error: 'No castles found',
+    };
   }
 
   console.log('\n=== Castle Status ===');
@@ -142,7 +217,7 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   // Click any free finish buttons (non-critical)
   try {
     await clickFreeFinishButtons(page);
-  } catch (error) {
+  } catch (_error) {
     console.warn('[Loop] Free finish buttons failed, continuing...');
   }
 
@@ -153,34 +228,45 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   let minTimeRemainingMs: number | null = null;
 
   // Castles that completed building and need further phases
-  const castlesForRecruitment: { castle: CastleState; castleIndex: number; unitsRecommendation: any }[] = [];
+  const castlesForRecruitment: {
+    castle: CastleState;
+    castleIndex: number;
+    unitsRecommendation: UnitsRecommendation;
+  }[] = [];
 
   // ==================== PHASE 1: BUILDINGS (all castles) ====================
   // Already on buildings view, process all castles
   for (let castleIndex = 0; castleIndex < castles.length; castleIndex++) {
     const castle = castles[castleIndex];
-    
-    let solverActions;
+
+    let solverActions: SolverActions;
     try {
       solverActions = await getNextActionsForCastle(solverClient, castle);
-    } catch (error) {
-      console.warn(`[${castle.name}] Failed to get solver data, skipping castle`);
+    } catch (_error) {
+      console.warn(
+        `[${castle.name}] Failed to get solver data, skipping castle`,
+      );
       continue;
     }
 
-    const { nextAction, nextResearchAction, unitsRecommendation } = solverActions;
+    const { nextAction, nextResearchAction, unitsRecommendation } =
+      solverActions;
 
     // Check if research should be done first (only for first castle)
     if (castleIndex === 0 && nextResearchAction) {
       try {
-        const shouldResearch = nextResearchAction.technology !== Technology.TECH_UNKNOWN &&
-          (!nextAction || nextResearchAction.startTimeSeconds <= nextAction.startTimeSeconds);
+        const shouldResearch =
+          nextResearchAction.technology !== Technology.TECH_UNKNOWN &&
+          (!nextAction ||
+            nextResearchAction.startTimeSeconds <= nextAction.startTimeSeconds);
 
         if (shouldResearch) {
-          console.log(`\nSolver recommends research first: ${technologyToJSON(nextResearchAction.technology)}`);
+          console.log(
+            `\nSolver recommends research first: ${technologyToJSON(nextResearchAction.technology)}`,
+          );
           await researchTechnology(page, nextResearchAction.technology);
         }
-      } catch (error) {
+      } catch (_error) {
         console.warn('[Loop] Research failed, continuing...');
       }
     }
@@ -192,14 +278,22 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
     } else {
       // Still building
       try {
-        const result = await handleBuildingPhase(page, castle, castleIndex, nextAction);
+        const result = await handleBuildingPhase(
+          page,
+          castle,
+          castleIndex,
+          nextAction,
+        );
         if (result.upgraded) totalUpgrades++;
         if (result.minTimeRemainingMs !== null) {
-          if (minTimeRemainingMs === null || result.minTimeRemainingMs < minTimeRemainingMs) {
+          if (
+            minTimeRemainingMs === null ||
+            result.minTimeRemainingMs < minTimeRemainingMs
+          ) {
             minTimeRemainingMs = result.minTimeRemainingMs;
           }
         }
-      } catch (error) {
+      } catch (_error) {
         console.warn(`[${castle.name}] Building phase failed, continuing...`);
       }
     }
@@ -211,32 +305,66 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
       page,
       () => navigateToRecruitmentView(page),
       gameRecoveryActions,
-      false
+      false,
     );
 
     if (onRecruitment) {
-      const recruitHealth = await waitForHealthy(page, createGameHealthChecker('recruitment'), { maxAttempts: 2, delayMs: 1000 });
+      const recruitHealth = await waitForHealthy(
+        page,
+        createGameHealthChecker('recruitment'),
+        { maxAttempts: 2, delayMs: 1000 },
+      );
       if (!recruitHealth.healthy) {
-        console.warn(`[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`);
+        console.warn(
+          `[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`,
+        );
       }
 
-      const allCastleUnits = await withRecovery(page, () => getUnits(page), gameRecoveryActions, []);
-      const castlesForTrading: { castle: CastleState; castleIndex: number; unitsRecommendation: any }[] = [];
+      const allCastleUnits = await withRecovery(
+        page,
+        () => getUnits(page),
+        gameRecoveryActions,
+        [],
+      );
+      const castlesForTrading: {
+        castle: CastleState;
+        castleIndex: number;
+        unitsRecommendation: UnitsRecommendation;
+      }[] = [];
 
-      for (const { castle, castleIndex, unitsRecommendation } of castlesForRecruitment) {
-        const castleUnits = allCastleUnits.find(cu => cu.name === castle.name);
-        const currentUnits = castleUnits?.units.map(u => ({ type: u.type, count: u.count }));
-        const { missingUnits } = determineCastlePhase(unitsRecommendation, currentUnits);
+      for (const {
+        castle,
+        castleIndex,
+        unitsRecommendation,
+      } of castlesForRecruitment) {
+        const castleUnits = allCastleUnits.find(
+          (cu) => cu.name === castle.name,
+        );
+        const currentUnits = castleUnits?.units.map((u) => ({
+          type: u.type,
+          count: u.count,
+        }));
+        const { missingUnits } = determineCastlePhase(
+          unitsRecommendation,
+          currentUnits,
+        );
 
         if (missingUnits.size > 0) {
           // Need to recruit
           printUnitComparison(castle.name, currentUnits, unitsRecommendation);
-          
+
           try {
-            const result = await handleRecruitingPhase(page, castle.name, castleIndex, missingUnits);
+            const result = await handleRecruitingPhase(
+              page,
+              castle.name,
+              castleIndex,
+              missingUnits,
+            );
             if (result.recruited) totalRecruits++;
-          } catch (error) {
-            console.warn(`[${castle.name}] Recruiting phase failed, continuing...`);
+          } catch (_error) {
+            console.warn(
+              `[${castle.name}] Recruiting phase failed, continuing...`,
+            );
           }
         } else {
           // Units complete - queue for trading
@@ -250,23 +378,39 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
           page,
           () => navigateToTradingView(page),
           gameRecoveryActions,
-          false
+          false,
         );
 
         if (onTrading) {
-          const tradingHealth = await waitForHealthy(page, createGameHealthChecker('trading'), { maxAttempts: 2, delayMs: 1000 });
+          const tradingHealth = await waitForHealthy(
+            page,
+            createGameHealthChecker('trading'),
+            { maxAttempts: 2, delayMs: 1000 },
+          );
           if (!tradingHealth.healthy) {
-            console.warn(`[Health] Trading view issues: ${tradingHealth.issues.join(', ')}`);
+            console.warn(
+              `[Health] Trading view issues: ${tradingHealth.issues.join(', ')}`,
+            );
           }
 
-          for (const { castle, castleIndex, unitsRecommendation } of castlesForTrading) {
+          for (const {
+            castle,
+            castleIndex,
+            unitsRecommendation,
+          } of castlesForTrading) {
             printUnitsRecommendation(castle.name, unitsRecommendation);
-            
+
             try {
-              const result = await handleTradingPhase(page, castle.name, castleIndex);
+              const result = await handleTradingPhase(
+                page,
+                castle.name,
+                castleIndex,
+              );
               if (result.traded) totalTrades++;
-            } catch (error) {
-              console.warn(`[${castle.name}] Trading phase failed, continuing...`);
+            } catch (_error) {
+              console.warn(
+                `[${castle.name}] Trading phase failed, continuing...`,
+              );
             }
           }
         }
