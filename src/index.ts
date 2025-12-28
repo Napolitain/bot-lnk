@@ -1,10 +1,10 @@
 import { chromium } from 'playwright';
 import { runBotLoop } from './bot/index.js';
 import { createTimeSnapshot, forceRefresh } from './browser/gameHealth.js';
-import { createSolverClient } from './client/solver.js';
+import { closeSolverClient, createSolverClient } from './client/solver.js';
 import { config, validateConfig } from './config.js';
 import { checkStale, type StateSnapshot } from './resilience/index.js';
-import { formatError } from './utils/index.js';
+import { cleanupDebugDumps, formatError } from './utils/index.js';
 
 async function main() {
   // Validate config
@@ -42,8 +42,9 @@ async function main() {
   });
 
   // Block media routes if enabled (saves RAM)
+  // Note: Route is registered once on the context, not per-page, to avoid accumulation
   if (config.blockMedia) {
-    await page.route('**/*', (route) => {
+    await context.route('**/*', (route) => {
       const resourceType = route.request().resourceType();
       if (['image', 'media', 'font'].includes(resourceType)) {
         route.abort();
@@ -61,9 +62,11 @@ async function main() {
 
   // State tracking for stale detection
   let lastSnapshot: StateSnapshot | null = null;
+  let cycleCount = 0;
 
   // Main bot loop - NEVER exits unless dry run or context closes
   while (true) {
+    cycleCount++;
     const result = await runBotLoop(page, solverClient);
 
     if (!result.success) {
@@ -87,6 +90,22 @@ async function main() {
 
     lastSnapshot = currentSnapshot;
 
+    // Periodic memory maintenance every 50 cycles
+    if (cycleCount % 50 === 0) {
+      console.log('[Main] Running periodic memory maintenance...');
+      // Clean up old debug dumps (keep last 20)
+      cleanupDebugDumps(20);
+      // Clear browser caches
+      try {
+        const client = await page.context().newCDPSession(page);
+        await client.send('Network.clearBrowserCache');
+        await client.detach();
+        console.log('[Main] Browser cache cleared');
+      } catch {
+        // CDP might not be available, ignore
+      }
+    }
+
     // In dry run mode, exit after one iteration
     if (config.dryRun) {
       console.log('\n[DRY RUN] Completed single iteration. Exiting.');
@@ -107,6 +126,7 @@ async function main() {
     }
   }
 
+  closeSolverClient();
   await context.close();
 }
 

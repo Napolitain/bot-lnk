@@ -1,4 +1,8 @@
-export { dumpElementContext, saveDebugContext } from './debug.js';
+export {
+  cleanupDebugDumps,
+  dumpElementContext,
+  saveDebugContext,
+} from './debug.js';
 export {
   type PollOptions,
   pollFor,

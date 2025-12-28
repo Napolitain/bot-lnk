@@ -23,6 +23,36 @@ async function getElementContext(locator: Locator): Promise<string> {
   }
 }
 
+/** Clean up old debug dump files, keeping only the most recent N */
+export function cleanupDebugDumps(keepCount = 20): void {
+  try {
+    const debugDir = path.join(config.userDataDir, 'debug-dumps');
+    if (!fs.existsSync(debugDir)) return;
+
+    const files = fs
+      .readdirSync(debugDir)
+      .filter((f) => f.endsWith('.html') || f.endsWith('.png'))
+      .map((f) => ({
+        name: f,
+        path: path.join(debugDir, f),
+        mtime: fs.statSync(path.join(debugDir, f)).mtime.getTime(),
+      }))
+      .sort((a, b) => b.mtime - a.mtime); // newest first
+
+    // Delete files beyond keepCount
+    const toDelete = files.slice(keepCount);
+    for (const file of toDelete) {
+      fs.unlinkSync(file.path);
+    }
+
+    if (toDelete.length > 0) {
+      console.log(`[Debug] Cleaned up ${toDelete.length} old debug files`);
+    }
+  } catch (e) {
+    console.warn('[Debug] Failed to cleanup debug dumps:', e);
+  }
+}
+
 /** Dump element context to file for debugging */
 export async function dumpElementContext(
   page: Page,

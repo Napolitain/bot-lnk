@@ -1,4 +1,4 @@
-import { createChannel, createClient } from 'nice-grpc';
+import { type Channel, createChannel, createClient } from 'nice-grpc';
 import { config } from '../config.js';
 import { SolverError } from '../errors/index.js';
 import type { CastleState } from '../game/castle.js';
@@ -17,9 +17,24 @@ export interface SolverActions {
   unitsRecommendation?: UnitsRecommendation;
 }
 
+let channel: Channel | null = null;
+let client: CastleSolverServiceClient | null = null;
+
 export function createSolverClient(): CastleSolverServiceClient {
-  const channel = createChannel(config.solverAddress);
-  return createClient(CastleSolverServiceDefinition, channel);
+  if (!client) {
+    channel = createChannel(config.solverAddress);
+    client = createClient(CastleSolverServiceDefinition, channel);
+  }
+  return client;
+}
+
+export function closeSolverClient(): void {
+  if (channel) {
+    channel.close();
+    channel = null;
+    client = null;
+    console.log('[Solver] gRPC channel closed');
+  }
 }
 
 export async function getNextActionsForCastle(
