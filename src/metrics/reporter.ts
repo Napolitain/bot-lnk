@@ -1,13 +1,97 @@
 import type {
+  MediaResourcesSummary,
   MetricsSnapshot,
   MetricsSummary,
   ResourceMetrics,
 } from './types.js';
 
 /**
+ * Categorize resources by media type for easy blocking decisions
+ */
+export function categorizeMediaResources(
+  resources: ResourceMetrics[],
+): MediaResourcesSummary {
+  const images: ResourceMetrics[] = [];
+  const fonts: ResourceMetrics[] = [];
+  const media: ResourceMetrics[] = [];
+  const stylesheets: ResourceMetrics[] = [];
+
+  let totalImageSize = 0;
+  let totalFontSize = 0;
+  let totalMediaSize = 0;
+  let totalStylesheetSize = 0;
+
+  for (const resource of resources) {
+    const type = resource.type.toLowerCase();
+
+    if (
+      type === 'image' ||
+      type === 'img' ||
+      type === 'png' ||
+      type === 'jpeg' ||
+      type === 'jpg' ||
+      type === 'gif' ||
+      type === 'webp' ||
+      type === 'svg'
+    ) {
+      images.push(resource);
+      totalImageSize += resource.transferSize;
+    } else if (
+      type === 'font' ||
+      type === 'woff' ||
+      type === 'woff2' ||
+      type === 'ttf' ||
+      type === 'otf'
+    ) {
+      fonts.push(resource);
+      totalFontSize += resource.transferSize;
+    } else if (type === 'media' || type === 'video' || type === 'audio') {
+      media.push(resource);
+      totalMediaSize += resource.transferSize;
+    } else if (type === 'stylesheet' || type === 'css') {
+      stylesheets.push(resource);
+      totalStylesheetSize += resource.transferSize;
+    }
+  }
+
+  // Sort by size (largest first)
+  images.sort((a, b) => b.transferSize - a.transferSize);
+  fonts.sort((a, b) => b.transferSize - a.transferSize);
+  media.sort((a, b) => b.transferSize - a.transferSize);
+  stylesheets.sort((a, b) => b.transferSize - a.transferSize);
+
+  return {
+    images,
+    fonts,
+    media,
+    stylesheets,
+    totalImageSize,
+    totalFontSize,
+    totalMediaSize,
+    totalStylesheetSize,
+  };
+}
+
+/**
+ * Identify heavy resources above a threshold
+ */
+export function identifyHeavyResources(
+  resources: ResourceMetrics[],
+  thresholdMB: number = 1,
+): ResourceMetrics[] {
+  const thresholdBytes = thresholdMB * 1024 * 1024;
+  return resources
+    .filter((r) => r.transferSize >= thresholdBytes)
+    .sort((a, b) => b.transferSize - a.transferSize);
+}
+
+/**
  * Format metrics snapshots into a human-readable summary
  */
-export function generateSummary(snapshots: MetricsSnapshot[]): MetricsSummary {
+export function generateSummary(
+  snapshots: MetricsSnapshot[],
+  heavyThresholdMB: number = 1,
+): MetricsSummary {
   if (snapshots.length === 0) {
     return {
       totalDuration: 0,
@@ -21,6 +105,17 @@ export function generateSummary(snapshots: MetricsSnapshot[]): MetricsSummary {
       topResourcesBySize: [],
       topResourcesByDuration: [],
       transferByType: new Map(),
+      mediaResources: {
+        images: [],
+        fonts: [],
+        media: [],
+        stylesheets: [],
+        totalImageSize: 0,
+        totalFontSize: 0,
+        totalMediaSize: 0,
+        totalStylesheetSize: 0,
+      },
+      heavyResources: [],
     };
   }
 
@@ -72,6 +167,12 @@ export function generateSummary(snapshots: MetricsSnapshot[]): MetricsSummary {
     .sort((a, b) => b.duration - a.duration)
     .slice(0, 10);
 
+  // Categorize media resources
+  const mediaResources = categorizeMediaResources(allResources);
+
+  // Identify heavy resources
+  const heavyResources = identifyHeavyResources(allResources, heavyThresholdMB);
+
   return {
     totalDuration,
     avgMemoryUsedMB,
@@ -84,6 +185,8 @@ export function generateSummary(snapshots: MetricsSnapshot[]): MetricsSummary {
     topResourcesBySize,
     topResourcesByDuration,
     transferByType,
+    mediaResources,
+    heavyResources,
   };
 }
 
@@ -133,6 +236,97 @@ export function printSummary(summary: MetricsSummary): void {
       console.log(
         `  ${resource.duration.toFixed(0)}ms - ${resource.type} - ${url}`,
       );
+    }
+  }
+
+  // Media resources summary (for blocking decisions)
+  const { mediaResources } = summary;
+  const hasMedia =
+    mediaResources.images.length > 0 ||
+    mediaResources.fonts.length > 0 ||
+    mediaResources.media.length > 0 ||
+    mediaResources.stylesheets.length > 0;
+
+  if (hasMedia) {
+    console.log(
+      '\n========== Media Resources (Blocking Candidates) ==========',
+    );
+
+    if (mediaResources.images.length > 0) {
+      const sizeMB = mediaResources.totalImageSize / (1024 * 1024);
+      console.log(
+        `\nImages: ${mediaResources.images.length} resources, ${sizeMB.toFixed(2)} MB total`,
+      );
+      const topImages = mediaResources.images.slice(0, 5);
+      for (const img of topImages) {
+        const imgSizeMB = img.transferSize / (1024 * 1024);
+        const url = truncateUrl(img.url, 70);
+        console.log(`  ${imgSizeMB.toFixed(2)} MB - ${url}`);
+      }
+      if (mediaResources.images.length > 5) {
+        console.log(`  ... and ${mediaResources.images.length - 5} more`);
+      }
+    }
+
+    if (mediaResources.fonts.length > 0) {
+      const sizeMB = mediaResources.totalFontSize / (1024 * 1024);
+      console.log(
+        `\nFonts: ${mediaResources.fonts.length} resources, ${sizeMB.toFixed(2)} MB total`,
+      );
+      const topFonts = mediaResources.fonts.slice(0, 5);
+      for (const font of topFonts) {
+        const fontSizeMB = font.transferSize / (1024 * 1024);
+        const url = truncateUrl(font.url, 70);
+        console.log(`  ${fontSizeMB.toFixed(2)} MB - ${url}`);
+      }
+      if (mediaResources.fonts.length > 5) {
+        console.log(`  ... and ${mediaResources.fonts.length - 5} more`);
+      }
+    }
+
+    if (mediaResources.media.length > 0) {
+      const sizeMB = mediaResources.totalMediaSize / (1024 * 1024);
+      console.log(
+        `\nMedia (Video/Audio): ${mediaResources.media.length} resources, ${sizeMB.toFixed(2)} MB total`,
+      );
+      for (const m of mediaResources.media) {
+        const mSizeMB = m.transferSize / (1024 * 1024);
+        const url = truncateUrl(m.url, 70);
+        console.log(`  ${mSizeMB.toFixed(2)} MB - ${url}`);
+      }
+    }
+
+    if (mediaResources.stylesheets.length > 0) {
+      const sizeMB = mediaResources.totalStylesheetSize / (1024 * 1024);
+      console.log(
+        `\nStylesheets: ${mediaResources.stylesheets.length} resources, ${sizeMB.toFixed(2)} MB total`,
+      );
+      const topCSS = mediaResources.stylesheets.slice(0, 5);
+      for (const css of topCSS) {
+        const cssSizeMB = css.transferSize / (1024 * 1024);
+        const url = truncateUrl(css.url, 70);
+        console.log(`  ${cssSizeMB.toFixed(2)} MB - ${url}`);
+      }
+      if (mediaResources.stylesheets.length > 5) {
+        console.log(`  ... and ${mediaResources.stylesheets.length - 5} more`);
+      }
+    }
+
+    console.log('============================================================');
+  }
+
+  // Heavy resources
+  if (summary.heavyResources.length > 0) {
+    console.log(
+      `\n⚠️  Heavy Resources (>= 1 MB): ${summary.heavyResources.length} found`,
+    );
+    for (const resource of summary.heavyResources.slice(0, 10)) {
+      const sizeMB = resource.transferSize / (1024 * 1024);
+      const url = truncateUrl(resource.url, 70);
+      console.log(`  ${sizeMB.toFixed(2)} MB - ${resource.type} - ${url}`);
+    }
+    if (summary.heavyResources.length > 10) {
+      console.log(`  ... and ${summary.heavyResources.length - 10} more`);
     }
   }
 

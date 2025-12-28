@@ -17,9 +17,11 @@
 
 export { MetricsCollector } from './collector.js';
 export {
+  categorizeMediaResources,
   formatBytes,
   formatDuration,
   generateSummary,
+  identifyHeavyResources,
   printSnapshots,
   printSummary,
 } from './reporter.js';
@@ -41,6 +43,7 @@ export function createMetricsCollector(
     collectPerformance: true,
     logToConsole: true,
     maxResourcesPerSnapshot: 100,
+    heavyResourceThresholdMB: 1, // 1 MB threshold for heavy resources
   };
 
   return new MetricsCollector({ ...defaultConfig, ...overrides });

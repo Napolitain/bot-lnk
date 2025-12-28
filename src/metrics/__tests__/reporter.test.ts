@@ -9,6 +9,8 @@ describe('generateSummary', () => {
     expect(summary.avgMemoryUsedMB).toBe(0);
     expect(summary.peakMemoryUsedMB).toBe(0);
     expect(summary.totalRequestCount).toBe(0);
+    expect(summary.mediaResources.images).toEqual([]);
+    expect(summary.heavyResources).toEqual([]);
   });
 
   it('calculates summary from multiple snapshots', () => {
@@ -182,6 +184,132 @@ describe('generateSummary', () => {
     );
     expect(summary.topResourcesByDuration).toHaveLength(2);
     expect(summary.topResourcesByDuration[0].duration).toBe(500);
+    expect(summary.heavyResources).toHaveLength(2); // Both are >= 1 MB
+  });
+
+  it('categorizes media resources correctly', () => {
+    const snapshots: MetricsSnapshot[] = [
+      {
+        timestamp: 1000,
+        label: 'test',
+        duration: 100,
+        memory: {
+          timestamp: 1000,
+          usedJSHeapSize: 10 * 1024 * 1024,
+          totalJSHeapSize: 20 * 1024 * 1024,
+          jsHeapSizeLimit: 100 * 1024 * 1024,
+          documents: 5,
+          nodes: 100,
+          jsEventListeners: 10,
+        },
+        performance: {
+          timestamp: 1000,
+          taskDuration: 50,
+          scriptDuration: 30,
+          layoutDuration: 10,
+          recalcStyleDuration: 5,
+          layoutCount: 2,
+          recalcStyleCount: 3,
+        },
+        network: {
+          timestamp: 1000,
+          totalRequests: 5,
+          totalTransferSize: 5 * 1024 * 1024,
+          totalEncodedBodySize: 2.5 * 1024 * 1024,
+          totalDecodedBodySize: 5 * 1024 * 1024,
+          requestsByType: new Map([
+            ['image', 2],
+            ['font', 1],
+            ['stylesheet', 1],
+            ['media', 1],
+          ]),
+          transferByType: new Map([
+            ['image', 2 * 1024 * 1024],
+            ['font', 1024 * 1024],
+            ['stylesheet', 512 * 1024],
+            ['media', 1.5 * 1024 * 1024],
+          ]),
+        },
+        resources: [
+          {
+            url: 'https://example.com/large-image.jpg',
+            type: 'image',
+            method: 'GET',
+            status: 200,
+            startTime: 0,
+            duration: 200,
+            encodedBodySize: 1024 * 1024,
+            decodedBodySize: 1024 * 1024,
+            transferSize: 1.5 * 1024 * 1024,
+          },
+          {
+            url: 'https://example.com/small-image.png',
+            type: 'image',
+            method: 'GET',
+            status: 200,
+            startTime: 100,
+            duration: 100,
+            encodedBodySize: 256 * 1024,
+            decodedBodySize: 512 * 1024,
+            transferSize: 512 * 1024,
+          },
+          {
+            url: 'https://example.com/font.woff2',
+            type: 'font',
+            method: 'GET',
+            status: 200,
+            startTime: 50,
+            duration: 150,
+            encodedBodySize: 512 * 1024,
+            decodedBodySize: 1024 * 1024,
+            transferSize: 1024 * 1024,
+          },
+          {
+            url: 'https://example.com/styles.css',
+            type: 'stylesheet',
+            method: 'GET',
+            status: 200,
+            startTime: 0,
+            duration: 80,
+            encodedBodySize: 256 * 1024,
+            decodedBodySize: 512 * 1024,
+            transferSize: 512 * 1024,
+          },
+          {
+            url: 'https://example.com/video.mp4',
+            type: 'media',
+            method: 'GET',
+            status: 200,
+            startTime: 200,
+            duration: 500,
+            encodedBodySize: 1024 * 1024,
+            decodedBodySize: 1.5 * 1024 * 1024,
+            transferSize: 1.5 * 1024 * 1024,
+          },
+        ],
+      },
+    ];
+
+    const summary = generateSummary(snapshots);
+
+    // Check media resources are categorized
+    expect(summary.mediaResources.images).toHaveLength(2);
+    expect(summary.mediaResources.fonts).toHaveLength(1);
+    expect(summary.mediaResources.stylesheets).toHaveLength(1);
+    expect(summary.mediaResources.media).toHaveLength(1);
+
+    // Check sizes
+    expect(summary.mediaResources.totalImageSize).toBe(2 * 1024 * 1024);
+    expect(summary.mediaResources.totalFontSize).toBe(1024 * 1024);
+    expect(summary.mediaResources.totalStylesheetSize).toBe(512 * 1024);
+    expect(summary.mediaResources.totalMediaSize).toBe(1.5 * 1024 * 1024);
+
+    // Check heavy resources (>= 1 MB)
+    expect(summary.heavyResources.length).toBeGreaterThan(0);
+    const heavyUrls = summary.heavyResources.map((r) => r.url);
+    expect(heavyUrls).toContain('https://example.com/large-image.jpg');
+    expect(heavyUrls).toContain('https://example.com/font.woff2');
+    expect(heavyUrls).toContain('https://example.com/video.mp4');
   });
 });
 

@@ -9,6 +9,8 @@ The performance metrics module provides fine-grained monitoring of bot runtime p
 - **Network Metrics**: Per-resource timing and transfer sizes
 - **Phase-Level Tracking**: Separate metrics for login, buildings, recruitment, and trading phases
 - **Summary Reports**: Aggregate metrics across multiple cycles
+- **Media Resource Identification**: Automatically categorize images, fonts, videos, and stylesheets for easy blocking decisions
+- **Heavy Resource Detection**: Identify resources above size threshold (default 1 MB)
 
 ## Usage
 
@@ -67,6 +69,35 @@ Top 10 Resources by Duration:
   1234ms - script - https://example.com/slow-script.js
   567ms - document - https://example.com/page.html
   ...
+
+========== Media Resources (Blocking Candidates) ==========
+
+Images: 15 resources, 8.45 MB total
+  3.21 MB - https://example.com/hero-image.jpg
+  2.15 MB - https://example.com/background.png
+  1.87 MB - https://example.com/banner.jpg
+  0.65 MB - https://example.com/icon-large.png
+  0.42 MB - https://example.com/thumbnail.jpg
+  ... and 10 more
+
+Fonts: 3 resources, 2.15 MB total
+  1.20 MB - https://example.com/fonts/custom-bold.woff2
+  0.85 MB - https://example.com/fonts/custom-regular.woff2
+  0.10 MB - https://example.com/fonts/icons.woff2
+
+Stylesheets: 5 resources, 1.23 MB total
+  0.65 MB - https://example.com/styles/main.css
+  0.35 MB - https://example.com/styles/theme.css
+  ...
+
+============================================================
+
+⚠️  Heavy Resources (>= 1 MB): 8 found
+  12.34 MB - script - https://example.com/large-bundle.js
+  5.67 MB - script - https://example.com/vendor.js
+  3.21 MB - image - https://example.com/hero-image.jpg
+  2.15 MB - image - https://example.com/background.png
+  ...
 ================================================
 ```
 
@@ -78,6 +109,12 @@ The metrics collector supports the following configuration options (see `src/met
 interface MetricsConfig {
   enabled: boolean;                  // Enable/disable metrics collection
   collectResources: boolean;         // Collect per-resource metrics
+  collectMemory: boolean;            // Collect memory metrics
+  collectPerformance: boolean;       // Collect CPU/rendering metrics
+  logToConsole: boolean;             // Print metrics to console
+  maxResourcesPerSnapshot: number;   // Limit resources per snapshot
+  heavyResourceThresholdMB: number;  // Threshold for identifying heavy resources (default: 1 MB)
+}
   collectMemory: boolean;            // Collect memory metrics
   collectPerformance: boolean;       // Collect CPU/rendering metrics
   logToConsole: boolean;             // Print metrics to console
@@ -198,19 +235,98 @@ For production use where performance is critical, consider:
 
 ## Use Cases
 
-### 1. Identifying Heavy Resources
+### 1. Identifying Media Resources for Blocking
 
-Use the "Top Resources by Size" and "Top Resources by Duration" reports to find resources that could be blocked:
+The metrics module automatically categorizes media resources (images, fonts, videos, stylesheets) making it easy to decide what to block:
 
 ```typescript
-// In src/index.ts, add to blockMedia logic:
+import { generateSummary, categorizeMediaResources } from './src/metrics';
+
+// Get metrics after some cycles
+const snapshots = metricsCollector.getSnapshots();
+const summary = generateSummary(snapshots);
+
+// Media resources are automatically categorized
+const { mediaResources } = summary;
+
+console.log(`Images: ${mediaResources.images.length} files, ${mediaResources.totalImageSize / (1024*1024)} MB`);
+console.log(`Fonts: ${mediaResources.fonts.length} files, ${mediaResources.totalFontSize / (1024*1024)} MB`);
+
+// Block large images based on metrics
 if (config.blockMedia) {
   await context.route('**/*', (route) => {
     const url = route.request().url();
-    // Block specific heavy resources identified from metrics
-    if (url.includes('heavy-script.js')) {
+    const resourceType = route.request().resourceType();
+    
+    // Block all images if they're heavy
+    if (resourceType === 'image' && mediaResources.totalImageSize > 5 * 1024 * 1024) {
       route.abort();
       return;
+    }
+    
+    // Block specific heavy fonts
+    const heavyFonts = mediaResources.fonts
+      .filter(f => f.transferSize > 500 * 1024)
+      .map(f => f.url);
+    
+    if (heavyFonts.some(font => url.includes(font))) {
+      route.abort();
+      return;
+    }
+    
+    route.continue();
+  });
+}
+```
+
+### 2. Identifying Heavy Resources
+
+Use the `heavyResources` array to find all resources above the threshold (default 1 MB):
+
+```typescript
+const summary = generateSummary(snapshots);
+
+// Heavy resources are already identified
+for (const resource of summary.heavyResources) {
+  const sizeMB = resource.transferSize / (1024 * 1024);
+  console.log(`Heavy: ${sizeMB.toFixed(2)} MB - ${resource.type} - ${resource.url}`);
+  
+  // Block in your route handler
+  if (config.blockMedia) {
+    // Add to blocklist
+  }
+}
+
+// Or use the helper function directly
+import { identifyHeavyResources } from './src/metrics';
+
+const allResources = snapshots.flatMap(s => s.resources);
+const heavy = identifyHeavyResources(allResources, 2); // 2 MB threshold
+```
+
+### 3. Programmatic Media Analysis
+
+Use helper functions for custom analysis:
+
+```typescript
+import { categorizeMediaResources, identifyHeavyResources } from './src/metrics';
+
+const allResources = snapshots.flatMap(s => s.resources);
+
+// Categorize by media type
+const media = categorizeMediaResources(allResources);
+
+// Find what's consuming bandwidth
+if (media.totalImageSize > media.totalFontSize + media.totalStylesheetSize) {
+  console.log('Images are the biggest bandwidth consumer - consider blocking');
+}
+
+// Identify heavy resources with custom threshold
+const veryHeavy = identifyHeavyResources(allResources, 5); // 5 MB threshold
+console.log(`Found ${veryHeavy.length} resources over 5 MB`);
+```
+
+### 4. Monitoring Memory Leaks
     }
     // ... rest of logic
   });

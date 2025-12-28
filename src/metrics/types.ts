@@ -73,6 +73,20 @@ export interface MetricsSummary {
   topResourcesBySize: ResourceMetrics[]; // Top 10 by transfer size
   topResourcesByDuration: ResourceMetrics[]; // Top 10 by duration
   transferByType: Map<string, number>; // bytes per resource type
+  mediaResources: MediaResourcesSummary; // Summary of media resources
+  heavyResources: ResourceMetrics[]; // Resources above heavy threshold
+}
+
+/** Summary of media resources for easy blocking decisions */
+export interface MediaResourcesSummary {
+  images: ResourceMetrics[]; // All image resources
+  fonts: ResourceMetrics[]; // All font resources
+  media: ResourceMetrics[]; // All media resources (video, audio)
+  stylesheets: ResourceMetrics[]; // All stylesheet resources
+  totalImageSize: number; // bytes
+  totalFontSize: number; // bytes
+  totalMediaSize: number; // bytes
+  totalStylesheetSize: number; // bytes
 }
 
 /** Configuration for metrics collection */
@@ -83,4 +97,5 @@ export interface MetricsConfig {
   collectPerformance: boolean; // Collect CPU/rendering metrics
   logToConsole: boolean; // Print metrics to console
   maxResourcesPerSnapshot: number; // Limit resources collected per snapshot
+  heavyResourceThresholdMB: number; // Threshold for identifying heavy resources (MB)
 }

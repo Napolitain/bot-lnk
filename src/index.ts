@@ -132,7 +132,7 @@ async function main() {
       if (config.enableMetrics) {
         const snapshots = metricsCollector.getSnapshots();
         if (snapshots.length > 0) {
-          const summary = generateSummary(snapshots);
+          const summary = generateSummary(snapshots, 1); // 1 MB threshold for heavy resources
           printSummary(summary);
           // Clear old snapshots after printing to avoid memory buildup
           metricsCollector.clearSnapshots();
@@ -148,7 +148,7 @@ async function main() {
       if (config.enableMetrics) {
         const snapshots = metricsCollector.getSnapshots();
         if (snapshots.length > 0) {
-          const summary = generateSummary(snapshots);
+          const summary = generateSummary(snapshots, 1); // 1 MB threshold for heavy resources
           printSummary(summary);
         }
       }
