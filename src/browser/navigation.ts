@@ -29,15 +29,15 @@ async function isOnTradingView(page: Page): Promise<boolean> {
   }
 }
 
-export async function navigateToBuildingsView(page: Page): Promise<boolean> {
+export async function navigateToBuildingsView(page: Page, forceRefresh = true): Promise<boolean> {
   await dismissPopups(page);
 
-  // Check if already on buildings view
-  if (await isOnBuildingsView(page)) {
+  // If not forcing refresh and already on buildings view, return
+  if (!forceRefresh && await isOnBuildingsView(page)) {
     return true;
   }
 
-  // Try to click the buildings button with polling
+  // Always click the buildings button to ensure fresh data
   const success = await pollUntil(
     async () => {
       await dismissPopups(page);

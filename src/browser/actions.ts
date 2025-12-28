@@ -64,16 +64,33 @@ async function getUnitCount(page: Page, castleIndex: number, unitIndex: number):
   }
 }
 
-/** Verify page is still healthy after an action */
+/** Verify page is still healthy after an action. If overlay detected, dismiss and retry. */
 async function verifyPostAction(page: Page, actionName: string, selector?: string): Promise<boolean> {
   await page.waitForTimeout(300);
-  const health = await checkPageHealth(page);
-  if (!health.healthy) {
-    console.error(`[${actionName}] Page unhealthy after action: ${health.issues.join(', ')}`);
-    await saveDebugContext(page, `unhealthy-${actionName}`, selector);
-    return false;
+  
+  // First check
+  let health = await checkPageHealth(page);
+  if (health.healthy) {
+    return true;
   }
-  return true;
+
+  // If overlay detected, try to dismiss it
+  if (health.issues.some(i => i.includes('overlay') || i.includes('Overlay'))) {
+    console.log(`[${actionName}] Overlay detected, attempting to dismiss...`);
+    await dismissPopups(page);
+    await page.waitForTimeout(500);
+    
+    // Re-check after dismissing
+    health = await checkPageHealth(page);
+    if (health.healthy) {
+      console.log(`[${actionName}] Overlay dismissed successfully`);
+      return true;
+    }
+  }
+
+  console.error(`[${actionName}] Page unhealthy after action: ${health.issues.join(', ')}`);
+  await saveDebugContext(page, `unhealthy-${actionName}`, selector);
+  return false;
 }
 
 export async function upgradeBuilding(page: Page, castleIndex: number, buildingType: BuildingType): Promise<boolean> {
