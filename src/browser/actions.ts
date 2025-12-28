@@ -9,7 +9,7 @@ import {
 import { config } from '../config.js';
 import { BUILDING_TYPE_TO_INDEX, TECHNOLOGY_TO_NAME, UNIT_TYPE_TO_INDEX } from '../game/mappings.js';
 import { dismissPopups } from './popups.js';
-import { checkPageHealth } from './health.js';
+import { checkGameHealth, dismissIfOverlay } from './gameHealth.js';
 import { saveDebugContext } from '../utils/index.js';
 
 /** Get current upgrade queue count for a castle by counting buildings with multiple cells */
@@ -69,7 +69,7 @@ async function verifyPostAction(page: Page, actionName: string, selector?: strin
   await page.waitForTimeout(300);
   
   // First check
-  let health = await checkPageHealth(page);
+  let health = await checkGameHealth(page);
   if (health.healthy) {
     return true;
   }
@@ -77,20 +77,22 @@ async function verifyPostAction(page: Page, actionName: string, selector?: strin
   // If overlay detected, try to dismiss it
   if (health.issues.some(i => i.includes('overlay') || i.includes('Overlay'))) {
     console.log(`[${actionName}] Overlay detected, attempting to dismiss...`);
-    await dismissPopups(page);
-    await page.waitForTimeout(500);
-    
-    // Re-check after dismissing
-    health = await checkPageHealth(page);
-    if (health.healthy) {
+    const dismissed = await dismissIfOverlay(page);
+    if (dismissed) {
       console.log(`[${actionName}] Overlay dismissed successfully`);
       return true;
     }
   }
 
-  console.error(`[${actionName}] Page unhealthy after action: ${health.issues.join(', ')}`);
-  await saveDebugContext(page, `unhealthy-${actionName}`, selector);
-  return false;
+  // Re-check health after any recovery attempt
+  const finalHealth = await checkGameHealth(page);
+  if (!finalHealth.healthy) {
+    console.error(`[${actionName}] Page unhealthy after action: ${finalHealth.issues.join(', ')}`);
+    await saveDebugContext(page, `unhealthy-${actionName}`, selector);
+    return false;
+  }
+  
+  return true;
 }
 
 export async function upgradeBuilding(page: Page, castleIndex: number, buildingType: BuildingType): Promise<boolean> {
@@ -233,7 +235,7 @@ export async function clickFreeFinishButtons(page: Page): Promise<number> {
             await page.waitForTimeout(500);
             
             // Verify page health after each click
-            const health = await checkPageHealth(page);
+            const health = await checkGameHealth(page);
             if (!health.healthy) {
               console.warn(`[freeFinish] Page unhealthy after click ${i + 1}: ${health.issues.join(', ')}`);
               break;

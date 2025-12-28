@@ -55,14 +55,6 @@ export async function navigateToBuildingsView(page: Page): Promise<boolean> {
   return success;
 }
 
-/** Force refresh the current view by reloading the page */
-export async function forceRefreshPage(page: Page): Promise<void> {
-  console.log('[Navigation] Forcing page refresh due to stale data');
-  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(2000);
-  await dismissPopups(page);
-}
-
 export async function navigateToRecruitmentView(page: Page): Promise<boolean> {
   await dismissPopups(page);
 

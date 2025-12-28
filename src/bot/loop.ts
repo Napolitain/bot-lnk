@@ -4,8 +4,8 @@ import { dismissPopups } from '../browser/popups.js';
 import { navigateToBuildingsView, navigateToRecruitmentView, navigateToTradingView } from '../browser/navigation.js';
 import { login } from '../browser/login.js';
 import { researchTechnology, clickFreeFinishButtons } from '../browser/actions.js';
-import { checkPageHealth, waitForHealthyPage } from '../browser/health.js';
-import { escalatingRecovery, withRecovery } from '../browser/recovery.js';
+import { checkGameHealth, createGameRecoveryActions, createGameHealthChecker } from '../browser/gameHealth.js';
+import { escalatingRecovery, withRecovery, waitForHealthy } from '../resilience/index.js';
 import { getCastles, CastleState } from '../game/castle.js';
 import { getUnits } from '../game/units.js';
 import { getNextActionsForCastle } from '../client/solver.js';
@@ -13,6 +13,9 @@ import { config } from '../config.js';
 import { determineCastlePhase } from '../domain/index.js';
 import { handleBuildingPhase, handleRecruitingPhase, handleTradingPhase } from './phases/index.js';
 import { printCastleStatus, printUnitsRecommendation, printUnitComparison, printCycleSummary, printSleepInfo } from './display.js';
+
+/** Game-specific recovery actions */
+const gameRecoveryActions = createGameRecoveryActions();
 
 /** Calculate sleep time based on minimum time remaining */
 function calculateSleepTime(minTimeRemainingMs: number): number {
@@ -49,7 +52,7 @@ export async function runBotLoop(page: Page, solverClient: CastleSolverServiceCl
     console.error(`[Loop] Unexpected error: ${errorMsg}`);
     
     // Try to recover
-    await escalatingRecovery(page, 'bot-loop-error');
+    await escalatingRecovery(page, gameRecoveryActions);
     
     return {
       success: false,
@@ -74,7 +77,7 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
       console.log(`[Loop] Navigated to: ${page.url()}`);
     } catch (error) {
       console.warn('[Loop] Navigation failed, attempting recovery...');
-      await escalatingRecovery(page, 'initial-navigation');
+      await escalatingRecovery(page, gameRecoveryActions);
       // Give it another moment after recovery
       await page.waitForTimeout(3000);
     }
@@ -84,7 +87,7 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   await dismissPopups(page);
 
   // Ensure we're logged in (this handles navigation and server selection)
-  const loggedIn = await withRecovery(page, 'login', () => login(page), false);
+  const loggedIn = await withRecovery(page, () => login(page), gameRecoveryActions, false);
   if (!loggedIn) {
     console.warn('[Loop] Login failed, dumping debug...');
     const { saveDebugContext } = await import('../utils/debug.js');
@@ -93,7 +96,7 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   }
 
   // Health check after login (non-blocking)
-  const initialHealth = await checkPageHealth(page);
+  const initialHealth = await checkGameHealth(page);
   if (!initialHealth.healthy) {
     console.warn(`[Health] Issues detected: ${initialHealth.issues.join(', ')}`);
     await dismissPopups(page);
@@ -103,8 +106,8 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   // Navigate to buildings view
   const onBuildings = await withRecovery(
     page,
-    'navigate-buildings',
     () => navigateToBuildingsView(page),
+    gameRecoveryActions,
     false
   );
   
@@ -116,13 +119,13 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   }
 
   // Health check after navigation (non-blocking)
-  const buildingsHealth = await waitForHealthyPage(page, 'buildings');
+  const buildingsHealth = await waitForHealthy(page, createGameHealthChecker('buildings'), { maxAttempts: 2, delayMs: 1000 });
   if (!buildingsHealth.healthy) {
     console.warn(`[Health] Buildings view issues: ${buildingsHealth.issues.join(', ')}`);
   }
 
   // Read all castles
-  const castles = await withRecovery(page, 'get-castles', () => getCastles(page), []);
+  const castles = await withRecovery(page, () => getCastles(page), gameRecoveryActions, []);
   
   if (castles.length === 0) {
     console.warn('[Loop] No castles found, dumping debug...');
@@ -206,18 +209,18 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
   if (castlesForRecruitment.length > 0) {
     const onRecruitment = await withRecovery(
       page,
-      'navigate-recruitment',
       () => navigateToRecruitmentView(page),
+      gameRecoveryActions,
       false
     );
 
     if (onRecruitment) {
-      const recruitHealth = await waitForHealthyPage(page, 'recruitment');
+      const recruitHealth = await waitForHealthy(page, createGameHealthChecker('recruitment'), { maxAttempts: 2, delayMs: 1000 });
       if (!recruitHealth.healthy) {
         console.warn(`[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`);
       }
 
-      const allCastleUnits = await withRecovery(page, 'get-units', () => getUnits(page), []);
+      const allCastleUnits = await withRecovery(page, () => getUnits(page), gameRecoveryActions, []);
       const castlesForTrading: { castle: CastleState; castleIndex: number; unitsRecommendation: any }[] = [];
 
       for (const { castle, castleIndex, unitsRecommendation } of castlesForRecruitment) {
@@ -245,13 +248,13 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
       if (castlesForTrading.length > 0) {
         const onTrading = await withRecovery(
           page,
-          'navigate-trading',
           () => navigateToTradingView(page),
+          gameRecoveryActions,
           false
         );
 
         if (onTrading) {
-          const tradingHealth = await waitForHealthyPage(page, 'trading');
+          const tradingHealth = await waitForHealthy(page, createGameHealthChecker('trading'), { maxAttempts: 2, delayMs: 1000 });
           if (!tradingHealth.healthy) {
             console.warn(`[Health] Trading view issues: ${tradingHealth.issues.join(', ')}`);
           }
