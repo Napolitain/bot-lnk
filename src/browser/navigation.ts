@@ -29,15 +29,15 @@ async function isOnTradingView(page: Page): Promise<boolean> {
   }
 }
 
-export async function navigateToBuildingsView(page: Page, forceRefresh = true): Promise<boolean> {
+export async function navigateToBuildingsView(page: Page): Promise<boolean> {
   await dismissPopups(page);
 
-  // If not forcing refresh and already on buildings view, return
-  if (!forceRefresh && await isOnBuildingsView(page)) {
+  // Check if already on buildings view
+  if (await isOnBuildingsView(page)) {
     return true;
   }
 
-  // Always click the buildings button to ensure fresh data
+  // Try to click the buildings button with polling
   const success = await pollUntil(
     async () => {
       await dismissPopups(page);
@@ -53,6 +53,14 @@ export async function navigateToBuildingsView(page: Page, forceRefresh = true): 
   );
 
   return success;
+}
+
+/** Force refresh the current view by reloading the page */
+export async function forceRefreshPage(page: Page): Promise<void> {
+  console.log('[Navigation] Forcing page refresh due to stale data');
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(2000);
+  await dismissPopups(page);
 }
 
 export async function navigateToRecruitmentView(page: Page): Promise<boolean> {

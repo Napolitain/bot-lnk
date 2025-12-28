@@ -25,3 +25,26 @@
 4. Process all castles for recruiting
 5. Switch to trading view (if any castle ready for trading)
 6. Process castles for trading (opens dialog per castle)
+
+## Recovery & Safety Guidelines
+
+### Principle: Keep core logic clean
+- Core loop/phase code should focus on game logic only
+- Recovery, retries, and safety checks happen at higher levels (index.ts, recovery.ts)
+- Don't mix business logic with error handling
+
+### Popup Handling
+- `dismissPopups()` is called at navigation boundaries
+- `verifyPostAction()` attempts to dismiss overlays if detected after an action
+- Popups should never persist - if they do, it's a bug
+
+### Stale Data Detection
+- Tracked at main loop level (index.ts), not in core loop
+- Compares time remaining between cycles
+- If time didn't decrease as expected after waiting, force page refresh
+- Only triggers after 60s+ wait with <50% expected decrease
+
+### Page Refresh
+- `forceRefreshPage()` does full page reload
+- Only used when stale data detected, not routinely
+- Avoids unnecessary refreshes that slow down the bot
