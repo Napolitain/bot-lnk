@@ -63,13 +63,137 @@ src/
 - **Not global** - opens a dialog per castle
 - Selector: `.menu--content-section`
 
-## Bot Flow
-1. Start on buildings view (read all castle state)
-2. Process all castles for building upgrades
-3. Switch to recruitment view (if any castle needs units)
-4. Process all castles for recruiting
-5. Switch to trading view (if any castle ready)
-6. Process castles for trading
+---
+
+## Current Bot Flow (Detailed)
+
+### Main Loop (`bot/loop.ts`)
+
+```
+1. STARTUP
+   ├── Check URL, navigate to lordsandknights.com if needed
+   ├── Dismiss popups
+   ├── Login (handles server selection)
+   └── Health check (non-blocking)
+
+2. BUILDINGS PHASE (all castles first)
+   ├── Navigate to buildings view
+   ├── Read all castle states (getCastles)
+   ├── Click free finish buttons
+   │
+   └── For each castle:
+       ├── Call solver (getNextActionsForCastle)
+       ├── If buildOrderComplete → queue for recruitment
+       └── Else → try upgrade (handleBuildingPhase)
+           ├── Skip if queue full (maxBuildingQueue)
+           ├── Check if building canUpgrade
+           ├── Check button not disabled (CSS class)
+           ├── Click upgrade button
+           ├── Handle confirmation dialog
+           └── Verify upgrade started
+
+3. RECRUITMENT PHASE (only castles with complete buildings)
+   ├── Navigate to recruitment view
+   ├── Read all unit counts (getUnits)
+   │
+   └── For each castle needing units:
+       ├── Compare current vs recommended units
+       ├── If missingUnits → recruit (handleRecruitingPhase)
+       │   ├── For each missing unit type:
+       │   │   ├── Fill input with amount
+       │   │   ├── Check button not disabled
+       │   │   └── Click recruit
+       └── Else → queue for trading
+
+4. TRADING PHASE (only castles with complete units)
+   ├── Navigate to trading view
+   │
+   └── For each castle ready for trading:
+       ├── Click castle's trade button
+       ├── Wait for dialog
+       ├── Click "Max" buttons
+       └── Click confirm/send
+
+5. SLEEP
+   ├── Calculate based on min upgrade time remaining
+   └── Wait for free finish threshold
+```
+
+### What Works ✅
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Login | ✅ Works | Handles server selection, remember-me |
+| Buildings view scraping | ✅ Works | All castles, resources, levels, upgrade status |
+| Solver integration | ✅ Works | gRPC client, deterministic results |
+| Building upgrades | ✅ Works | Clicks upgrade, handles confirmation |
+| Disabled button detection | ✅ Works | Checks CSS `disabled` class |
+| Free finish buttons | ✅ Works | Clicks available free finishes |
+| Popup dismissal | ✅ Works | Tutorial overlays, close buttons |
+| Health checks | ✅ Works | Overlay detection, page state |
+| Recovery | ✅ Works | Escalating: popups → reload → reset |
+| Research | ✅ Works | Technology research in library |
+
+### What Partially Works ⚠️
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Recruitment | ⚠️ Partial | Clicks work, but input filling may be flaky |
+| Unit count reading | ⚠️ Partial | Works but verification after recruit is minimal |
+| Stale detection | ⚠️ Partial | Implemented but may need tuning |
+
+### What Doesn't Work / Not Implemented ❌
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Trading | ❌ Untested | Dialog interaction may be incomplete |
+| Multi-castle trading | ❌ Unknown | Trading view is per-castle dialog |
+| Attack/Defense | ❌ Not implemented | No combat features |
+| Alliance features | ❌ Not implemented | |
+| Map interactions | ❌ Not implemented | |
+
+---
+
+## Key Implementation Details
+
+### Button Click Pattern
+```typescript
+// 1. Check CSS disabled class (game uses class, not attribute)
+const hasDisabledClass = await btn.evaluate(el => el.classList.contains('disabled'));
+if (hasDisabledClass) {
+  console.warn('Button disabled - skipping');
+  return false;
+}
+
+// 2. Check HTML disabled attribute
+if (!await btn.isEnabled()) {
+  return false;
+}
+
+// 3. Click
+await btn.click();
+```
+
+### Popup Detection
+```typescript
+// Tutorial overlays
+'.icon-tutorial.icon-close-button'
+
+// Generic close buttons
+'.icon-close-button'
+
+// Blocking overlays (health check)
+'.overlay, .modal, .dialog'
+```
+
+### Sleep Calculation
+```typescript
+// Sleep until free finish is available
+sleepMs = minTimeRemainingMs - freeFinishThresholdMs;
+sleepMs = clamp(sleepMs, minMs, maxMs);
+```
+
+---
 
 ## Recovery Guidelines
 
@@ -89,3 +213,13 @@ src/
 - Tracked at main loop level using `checkStale()`
 - Compares state snapshots between cycles
 - Triggers `forceRefresh()` if state unchanged after expected time
+
+---
+
+## Known Issues / TODOs
+
+1. **Trading not fully tested** - Dialog flow may need adjustment
+2. **Recruitment verification** - Only checks health, not actual unit increase
+3. **Multi-castle coordination** - Currently sequential, could be smarter
+4. **Resource waiting** - Bot skips if disabled, could wait for resources
+5. **Research timing** - Only researches for first castle
