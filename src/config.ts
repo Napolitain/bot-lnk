@@ -1,7 +1,18 @@
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import 'dotenv/config';
 import { BuildingType } from './generated/proto/config.js';
+
+/** Blocklist configuration for resource filtering */
+export interface BlocklistConfig {
+  /** Block by resource type (image, font, media, stylesheet, script) */
+  resourceTypes: string[];
+  /** Block URLs matching these patterns (substring match) */
+  urlPatterns: string[];
+  /** Never block URLs matching these patterns (takes precedence) */
+  allowPatterns: string[];
+}
 
 export const config = {
   // Dry run mode - prints actions instead of clicking
@@ -15,6 +26,9 @@ export const config = {
 
   // Enable performance metrics collection
   enableMetrics: process.env.ENABLE_METRICS === 'true',
+
+  // Blocklist configuration - loaded from BLOCKLIST_FILE or uses defaults
+  blocklist: loadBlocklist(),
 
   // Persistent session directory
   userDataDir:
@@ -62,6 +76,47 @@ export const config = {
     { type: BuildingType.FORTIFICATIONS, level: 20 },
   ],
 };
+
+/**
+ * Load blocklist from JSON file or return defaults
+ */
+function loadBlocklist(): BlocklistConfig {
+  const defaultBlocklist: BlocklistConfig = {
+    // Default: only block tracking/analytics - NOT images/fonts (breaks game UI)
+    resourceTypes: ['media'], // Only block video/audio
+    urlPatterns: [
+      // Common tracking/analytics
+      'googletagmanager.com',
+      'google-analytics.com',
+      'analytics.',
+      'facebook.net',
+      'doubleclick.net',
+      'adsystem',
+      'adservice',
+      'tracking.',
+      'pixel.',
+    ],
+    allowPatterns: [],
+  };
+
+  const blocklistFile = process.env.BLOCKLIST_FILE;
+  if (!blocklistFile) {
+    return defaultBlocklist;
+  }
+
+  try {
+    const content = fs.readFileSync(blocklistFile, 'utf-8');
+    const loaded = JSON.parse(content) as Partial<BlocklistConfig>;
+    return {
+      resourceTypes: loaded.resourceTypes ?? defaultBlocklist.resourceTypes,
+      urlPatterns: loaded.urlPatterns ?? defaultBlocklist.urlPatterns,
+      allowPatterns: loaded.allowPatterns ?? defaultBlocklist.allowPatterns,
+    };
+  } catch (error) {
+    console.warn(`[Config] Failed to load blocklist from ${blocklistFile}:`, error);
+    return defaultBlocklist;
+  }
+}
 
 export function validateConfig(): void {
   if (!config.email || !config.password || !config.server) {

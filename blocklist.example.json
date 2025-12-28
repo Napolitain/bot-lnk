@@ -1,0 +1,14 @@
+{
+  "resourceTypes": ["image", "media", "font"],
+  "urlPatterns": [
+    "googletagmanager.com",
+    "google-analytics.com",
+    "facebook.net",
+    "doubleclick.net",
+    "adsystem"
+  ],
+  "allowPatterns": [
+    "lordsandknights",
+    "lnk-"
+  ]
+}

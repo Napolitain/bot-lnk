@@ -8,6 +8,14 @@ import type {
   ResourceMetrics,
 } from './types.js';
 
+/** Track in-flight requests */
+interface PendingRequest {
+  url: string;
+  type: string;
+  method: string;
+  startTime: number;
+}
+
 /**
  * MetricsCollector uses Chrome DevTools Protocol (CDP) to collect
  * fine-grained performance metrics including CPU time, memory usage,
@@ -20,6 +28,7 @@ export class MetricsCollector {
   private currentLabel: string | null = null;
   private startTime: number = 0;
   private resourceTimings: ResourceMetrics[] = [];
+  private pendingRequests: Map<string, PendingRequest> = new Map();
 
   constructor(config: MetricsConfig) {
     this.config = config;
@@ -42,6 +51,7 @@ export class MetricsCollector {
       // Enable Network domain for resource metrics
       if (this.config.collectResources) {
         await this.cdpSession.send('Network.enable');
+        this.setupNetworkListeners();
       }
 
       console.log('[Metrics] CDP session initialized');
@@ -49,6 +59,75 @@ export class MetricsCollector {
       console.warn('[Metrics] Failed to initialize CDP:', error);
       this.config.enabled = false;
     }
+  }
+
+  /**
+   * Setup CDP network event listeners to track resource timings
+   */
+  private setupNetworkListeners(): void {
+    if (!this.cdpSession) return;
+
+    // Track request start
+    this.cdpSession.on('Network.requestWillBeSent', (params) => {
+      this.pendingRequests.set(params.requestId, {
+        url: params.request.url,
+        type: params.type || 'Other',
+        method: params.request.method,
+        startTime: Date.now(),
+      });
+    });
+
+    // Track request completion
+    this.cdpSession.on('Network.loadingFinished', (params) => {
+      const pending = this.pendingRequests.get(params.requestId);
+      if (pending && this.currentLabel) {
+        const resource: ResourceMetrics = {
+          url: pending.url,
+          type: pending.type,
+          method: pending.method,
+          status: 200, // Will be updated by responseReceived if available
+          startTime: pending.startTime - this.startTime,
+          duration: Date.now() - pending.startTime,
+          encodedBodySize: params.encodedDataLength || 0,
+          decodedBodySize: params.encodedDataLength || 0, // CDP doesn't always provide decoded
+          transferSize: params.encodedDataLength || 0,
+        };
+        this.resourceTimings.push(resource);
+      }
+      this.pendingRequests.delete(params.requestId);
+    });
+
+    // Track response status
+    this.cdpSession.on('Network.responseReceived', (params) => {
+      // Update pending request with status info if needed
+      const pending = this.pendingRequests.get(params.requestId);
+      if (pending) {
+        // Status will be captured when loadingFinished fires
+        // For now, store it on the pending object
+        (pending as PendingRequest & { status?: number }).status =
+          params.response.status;
+      }
+    });
+
+    // Track failed requests
+    this.cdpSession.on('Network.loadingFailed', (params) => {
+      const pending = this.pendingRequests.get(params.requestId);
+      if (pending && this.currentLabel) {
+        const resource: ResourceMetrics = {
+          url: pending.url,
+          type: pending.type,
+          method: pending.method,
+          status: 0, // Failed
+          startTime: pending.startTime - this.startTime,
+          duration: Date.now() - pending.startTime,
+          encodedBodySize: 0,
+          decodedBodySize: 0,
+          transferSize: 0,
+        };
+        this.resourceTimings.push(resource);
+      }
+      this.pendingRequests.delete(params.requestId);
+    });
   }
 
   /**
@@ -60,6 +139,7 @@ export class MetricsCollector {
     this.currentLabel = label;
     this.startTime = Date.now();
     this.resourceTimings = [];
+    this.pendingRequests.clear();
 
     if (this.config.logToConsole) {
       console.log(`[Metrics] Started period: ${label}`);
@@ -284,28 +364,72 @@ export class MetricsCollector {
    */
   private logSnapshot(snapshot: MetricsSnapshot): void {
     const memoryMB = snapshot.memory.usedJSHeapSize / (1024 * 1024);
+    const totalHeapMB = snapshot.memory.totalJSHeapSize / (1024 * 1024);
     const transferMB = snapshot.network.totalTransferSize / (1024 * 1024);
 
-    console.log(`[Metrics] ${snapshot.label} (${snapshot.duration}ms):`);
-    console.log(`  Memory: ${memoryMB.toFixed(2)} MB`);
-    console.log(
-      `  CPU: ${snapshot.performance.scriptDuration.toFixed(2)}ms script, ${snapshot.performance.layoutDuration.toFixed(2)}ms layout`,
-    );
-    console.log(
-      `  Network: ${snapshot.network.totalRequests} requests, ${transferMB.toFixed(2)} MB`,
-    );
+    console.log(`\n[Metrics] ═══ ${snapshot.label} (${snapshot.duration}ms) ═══`);
+    
+    // Memory details
+    console.log(`  Memory:`);
+    console.log(`    JS Heap: ${memoryMB.toFixed(2)} MB used / ${totalHeapMB.toFixed(2)} MB total`);
+    console.log(`    DOM: ${snapshot.memory.nodes} nodes, ${snapshot.memory.documents} documents, ${snapshot.memory.jsEventListeners} listeners`);
+    
+    // CPU details
+    console.log(`  CPU:`);
+    console.log(`    Script: ${snapshot.performance.scriptDuration.toFixed(2)}ms, Layout: ${snapshot.performance.layoutDuration.toFixed(2)}ms`);
+    console.log(`    Task: ${snapshot.performance.taskDuration.toFixed(2)}ms, Style recalc: ${snapshot.performance.recalcStyleDuration.toFixed(2)}ms`);
+    console.log(`    Layout count: ${snapshot.performance.layoutCount}, Style recalc count: ${snapshot.performance.recalcStyleCount}`);
+    
+    // Network summary
+    console.log(`  Network: ${snapshot.network.totalRequests} requests, ${transferMB.toFixed(2)} MB transfer`);
 
-    // Show top resource types by transfer size
-    const topTypes = Array.from(snapshot.network.transferByType.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3);
-    if (topTypes.length > 0) {
-      console.log('  Top types:');
-      for (const [type, size] of topTypes) {
+    // All resource types by transfer size
+    const allTypes = Array.from(snapshot.network.transferByType.entries())
+      .sort((a, b) => b[1] - a[1]);
+    if (allTypes.length > 0) {
+      console.log('  By type:');
+      for (const [type, size] of allTypes) {
+        const count = snapshot.network.requestsByType.get(type) || 0;
         const sizeMB = size / (1024 * 1024);
-        console.log(`    ${type}: ${sizeMB.toFixed(2)} MB`);
+        const sizeKB = size / 1024;
+        const sizeStr = sizeMB >= 0.1 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(1)} KB`;
+        console.log(`    ${type}: ${count} req, ${sizeStr}`);
       }
     }
+
+    // Top 10 individual resources by size
+    if (snapshot.resources.length > 0) {
+      const topBySize = [...snapshot.resources]
+        .sort((a, b) => b.transferSize - a.transferSize)
+        .slice(0, 10);
+      console.log('  Top resources by size:');
+      for (const res of topBySize) {
+        const sizeKB = res.transferSize / 1024;
+        const url = this.truncateUrl(res.url, 60);
+        console.log(`    ${sizeKB.toFixed(1)} KB | ${res.type} | ${url}`);
+      }
+    }
+
+    // Top 5 slowest resources
+    if (snapshot.resources.length > 0) {
+      const topByDuration = [...snapshot.resources]
+        .sort((a, b) => b.duration - a.duration)
+        .slice(0, 5);
+      console.log('  Slowest resources:');
+      for (const res of topByDuration) {
+        const url = this.truncateUrl(res.url, 60);
+        console.log(`    ${res.duration}ms | ${res.type} | ${url}`);
+      }
+    }
+  }
+
+  /**
+   * Truncate URL for display
+   */
+  private truncateUrl(url: string, maxLength: number): string {
+    if (url.length <= maxLength) return url;
+    const half = Math.floor((maxLength - 3) / 2);
+    return `${url.slice(0, half)}...${url.slice(-half)}`;
   }
 
   /**

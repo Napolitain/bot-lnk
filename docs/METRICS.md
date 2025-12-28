@@ -279,6 +279,74 @@ function printSummary(summary: MetricsSummary): void
 function printSnapshots(snapshots: MetricsSnapshot[]): void
 ```
 
+## Resource Blocking
+
+The bot supports configurable resource blocking to reduce RAM and bandwidth usage. This works in conjunction with metrics collection to enable a profiling-guided approach.
+
+### Enable Blocking
+
+```bash
+# Basic blocking (uses default blocklist)
+BLOCK_MEDIA=true
+
+# Custom blocklist file
+BLOCK_MEDIA=true
+BLOCKLIST_FILE=./blocklist.json
+```
+
+### Blocklist Configuration
+
+Create a `blocklist.json` file (see `blocklist.example.json`):
+
+```json
+{
+  "resourceTypes": ["image", "media", "font"],
+  "urlPatterns": [
+    "googletagmanager.com",
+    "google-analytics.com",
+    "facebook.net"
+  ],
+  "allowPatterns": [
+    "lordsandknights",
+    "lnk-"
+  ]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `resourceTypes` | Block by Playwright resource type (image, media, font, stylesheet, script) |
+| `urlPatterns` | Block URLs containing these substrings |
+| `allowPatterns` | Never block URLs containing these (takes precedence) |
+
+### Profiling-Guided Blocking Workflow
+
+1. **Collect baseline metrics**:
+   ```bash
+   ENABLE_METRICS=true npm start
+   ```
+
+2. **Identify heavy resources** from the "Top Resources by Size" report
+
+3. **Add candidates to blocklist** in `blocklist.json`
+
+4. **Test in dry-run mode**:
+   ```bash
+   DRY_RUN=true BLOCK_MEDIA=true npm start
+   ```
+
+5. **Verify bot still functions** - check for errors or broken game state
+
+6. **Graduate to production** once verified safe
+
+### Safe Defaults
+
+The default blocklist is conservative:
+- Blocks: `image`, `media`, `font` resource types
+- Allows: Any URL containing `lordsandknights` or `lnk-`
+
+This ensures game-critical resources are never blocked.
+
 ## Future Enhancements
 
 Potential improvements to the metrics module:

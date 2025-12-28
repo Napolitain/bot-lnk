@@ -1,34 +1,38 @@
-import { chromium } from 'playwright';
+import { type BrowserContext, type Page, chromium } from 'playwright';
 import { runBotLoop } from './bot/index.js';
 import { createTimeSnapshot, forceRefresh } from './browser/gameHealth.js';
 import { closeSolverClient, createSolverClient } from './client/solver.js';
 import { config, validateConfig } from './config.js';
 import {
+  type MetricsCollector,
   createMetricsCollector,
   generateSummary,
   printSummary,
 } from './metrics/index.js';
 import { checkStale, type StateSnapshot } from './resilience/index.js';
-import { cleanupDebugDumps, formatError } from './utils/index.js';
+import {
+  cleanupDebugDumps,
+  formatError,
+  logMemoryStatus,
+  shouldRestartForMemory,
+} from './utils/index.js';
 
-async function main() {
-  // Validate config
-  validateConfig();
+// Browser launch options
+const headlessArgs = [
+  '--disable-blink-features=AutomationControlled',
+  '--no-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+];
+const headfulArgs = ['--disable-blink-features=AutomationControlled'];
 
-  // Launch browser with persistent context to reuse login session
-  console.log(`Using persistent session at: ${config.userDataDir}`);
-
-  // Anti-detection args for headless mode
-  const headlessArgs = [
-    '--disable-blink-features=AutomationControlled',
-    '--no-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-  ];
-
-  // Minimal args for headful mode (more natural)
-  const headfulArgs = ['--disable-blink-features=AutomationControlled'];
-
+/**
+ * Create a new browser context and page with all required setup
+ */
+async function createBrowserContext(): Promise<{
+  context: BrowserContext;
+  page: Page;
+}> {
   const context = await chromium.launchPersistentContext(config.userDataDir, {
     headless: config.headless,
     viewport: { width: 1920, height: 1080 },
@@ -46,39 +50,113 @@ async function main() {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
   });
 
-  // Block media routes if enabled (saves RAM)
-  // Note: Route is registered once on the context, not per-page, to avoid accumulation
+  // Block resources if enabled (saves RAM)
   if (config.blockMedia) {
+    const { blocklist } = config;
     await context.route('**/*', (route) => {
+      const url = route.request().url();
       const resourceType = route.request().resourceType();
-      if (['image', 'media', 'font'].includes(resourceType)) {
-        route.abort();
-      } else {
-        route.continue();
+
+      // Check allowlist first (never block these)
+      for (const pattern of blocklist.allowPatterns) {
+        if (url.includes(pattern)) {
+          route.continue();
+          return;
+        }
       }
+
+      // Block by resource type
+      if (blocklist.resourceTypes.includes(resourceType)) {
+        route.abort();
+        return;
+      }
+
+      // Block by URL pattern
+      for (const pattern of blocklist.urlPatterns) {
+        if (url.includes(pattern)) {
+          route.abort();
+          return;
+        }
+      }
+
+      route.continue();
     });
-    console.log('Media blocking enabled (images, fonts, media)');
+    console.log(
+      `[Browser] Resource blocking enabled (types: ${blocklist.resourceTypes.join(', ')}, ` +
+        `patterns: ${blocklist.urlPatterns.length}, allow: ${blocklist.allowPatterns.length})`,
+    );
   }
 
-  // Create gRPC client
+  return { context, page };
+}
+
+/**
+ * Initialize metrics collector for a page
+ */
+async function initializeMetrics(
+  page: Page,
+  collector: MetricsCollector,
+): Promise<void> {
+  if (config.enableMetrics) {
+    await collector.initialize(page);
+    console.log('[Metrics] Performance metrics enabled');
+  }
+}
+
+async function main() {
+  // Validate config
+  validateConfig();
+
+  console.log(`Using persistent session at: ${config.userDataDir}`);
+
+  // Create initial browser context
+  let { context, page } = await createBrowserContext();
+
+  // Create gRPC client (persists across restarts)
   const solverClient = createSolverClient();
 
   // Create metrics collector
   const metricsCollector = createMetricsCollector();
-  if (config.enableMetrics) {
-    await metricsCollector.initialize(page);
-    console.log('[Metrics] Performance metrics enabled');
-  }
+  await initializeMetrics(page, metricsCollector);
 
   console.log(`Starting bot...${config.dryRun ? ' [DRY RUN MODE]' : ''}`);
+  logMemoryStatus();
 
-  // State tracking for stale detection
+  // State tracking
   let lastSnapshot: StateSnapshot | null = null;
   let cycleCount = 0;
+  let contextRestartCount = 0;
 
   // Main bot loop - NEVER exits unless dry run or context closes
   while (true) {
     cycleCount++;
+
+    // Check system memory before each cycle
+    const memCheck = shouldRestartForMemory();
+    if (memCheck.shouldRestart && memCheck.reason) {
+      console.warn(`[Memory] ${memCheck.reason}`);
+      console.log('[Memory] Restarting browser context to free memory...');
+
+      // Cleanup current context
+      if (config.enableMetrics) {
+        await metricsCollector.cleanup();
+      }
+      await context.close();
+
+      // Small delay to let OS reclaim memory
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Create fresh context
+      ({ context, page } = await createBrowserContext());
+      await initializeMetrics(page, metricsCollector);
+
+      contextRestartCount++;
+      lastSnapshot = null; // Reset stale detection
+      console.log(
+        `[Memory] Context restarted (total restarts: ${contextRestartCount})`,
+      );
+      logMemoryStatus();
+    }
 
     // Start metrics collection for this cycle
     if (config.enableMetrics) {
@@ -113,11 +191,14 @@ async function main() {
       await metricsCollector.endPeriod();
     }
 
-    // Periodic memory maintenance every 50 cycles
+    // Periodic maintenance every 50 cycles
     if (cycleCount % 50 === 0) {
-      console.log('[Main] Running periodic memory maintenance...');
+      console.log('[Main] Running periodic maintenance...');
+      logMemoryStatus();
+
       // Clean up old debug dumps (keep last 20)
       cleanupDebugDumps(20);
+
       // Clear browser caches
       try {
         const client = await page.context().newCDPSession(page);
@@ -128,13 +209,12 @@ async function main() {
         // CDP might not be available, ignore
       }
 
-      // Print metrics summary every 50 cycles
+      // Print metrics summary
       if (config.enableMetrics) {
         const snapshots = metricsCollector.getSnapshots();
         if (snapshots.length > 0) {
           const summary = generateSummary(snapshots);
           printSummary(summary);
-          // Clear old snapshots after printing to avoid memory buildup
           metricsCollector.clearSnapshots();
         }
       }
@@ -144,7 +224,6 @@ async function main() {
     if (config.dryRun) {
       console.log('\n[DRY RUN] Completed single iteration. Exiting.');
 
-      // Print final metrics in dry run mode
       if (config.enableMetrics) {
         const snapshots = metricsCollector.getSnapshots();
         if (snapshots.length > 0) {
