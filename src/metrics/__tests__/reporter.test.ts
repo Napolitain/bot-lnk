@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { MetricsSnapshot } from '../types.js';
 import { formatBytes, formatDuration, generateSummary } from '../reporter.js';
+import type { MetricsSnapshot } from '../types.js';
 
 describe('generateSummary', () => {
   it('returns empty summary for no snapshots', () => {
@@ -41,7 +41,11 @@ describe('generateSummary', () => {
           totalTransferSize: 1024 * 1024, // 1 MB
           totalEncodedBodySize: 512 * 1024,
           totalDecodedBodySize: 1024 * 1024,
-          requestsByType: new Map([['script', 5], ['document', 1], ['image', 4]]),
+          requestsByType: new Map([
+            ['script', 5],
+            ['document', 1],
+            ['image', 4],
+          ]),
           transferByType: new Map([
             ['script', 512 * 1024],
             ['document', 256 * 1024],
@@ -78,7 +82,11 @@ describe('generateSummary', () => {
           totalTransferSize: 2 * 1024 * 1024, // 2 MB
           totalEncodedBodySize: 1024 * 1024,
           totalDecodedBodySize: 2 * 1024 * 1024,
-          requestsByType: new Map([['script', 8], ['document', 2], ['image', 5]]),
+          requestsByType: new Map([
+            ['script', 8],
+            ['document', 2],
+            ['image', 5],
+          ]),
           transferByType: new Map([
             ['script', 1024 * 1024],
             ['document', 512 * 1024],
@@ -169,7 +177,9 @@ describe('generateSummary', () => {
     const summary = generateSummary(snapshots);
 
     expect(summary.topResourcesBySize).toHaveLength(2);
-    expect(summary.topResourcesBySize[0].url).toBe('https://example.com/large.js');
+    expect(summary.topResourcesBySize[0].url).toBe(
+      'https://example.com/large.js',
+    );
     expect(summary.topResourcesByDuration).toHaveLength(2);
     expect(summary.topResourcesByDuration[0].duration).toBe(500);
   });

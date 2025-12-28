@@ -9,6 +9,7 @@ A Playwright-based automation bot for **Lords and Knights** browser game. Integr
 - **Multi-Castle Support**: Handles multiple castles efficiently
 - **Resilient**: Auto-recovery from errors, popup dismissal, health checks
 - **Session Persistence**: Maintains login across restarts
+- **Performance Metrics**: Optional CDP-based metrics collection for memory, CPU, and network monitoring
 
 ## Quick Start
 
@@ -52,8 +53,12 @@ PASSWORD=your-game-password
 SOLVER_HOST=localhost:50051    # gRPC solver address
 HEADLESS=false                 # Run browser headless
 DRY_RUN=false                  # Don't perform actions, just log
+BLOCK_MEDIA=false              # Block images/fonts/media for RAM savings
+ENABLE_METRICS=false           # Collect performance metrics (memory, CPU, network)
 MAX_BUILDING_QUEUE=1           # Max buildings in queue
 ```
+
+For detailed metrics documentation, see [docs/METRICS.md](docs/METRICS.md).
 
 ### Running
 
@@ -105,6 +110,12 @@ bot-lnk/
 │   ├── client/               # External services
 │   │   └── solver.ts         # gRPC client
 │   │
+│   ├── metrics/              # Performance monitoring
+│   │   ├── types.ts          # Metric interfaces
+│   │   ├── collector.ts      # CDP-based collector
+│   │   ├── reporter.ts       # Formatting & reporting
+│   │   └── index.ts          # Main exports
+│   │
 │   ├── resilience/           # Recovery utilities
 │   │   ├── core.ts           # Retry, polling
 │   │   └── types.ts          # Interfaces
@@ -112,6 +123,8 @@ bot-lnk/
 │   └── utils/                # General utilities
 │
 ├── proto/                    # Submodule → proto-lnk
+├── docs/                     # Documentation
+│   └── METRICS.md            # Performance metrics guide
 ├── package.json
 └── tsconfig.json
 ```
