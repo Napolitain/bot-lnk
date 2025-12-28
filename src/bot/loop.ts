@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { Technology, technologyToJSON, CastleSolverServiceClient, UnitsRecommendation, UnitCount } from '../generated/proto/config.js';
+import { Technology, technologyToJSON, CastleSolverServiceClient } from '../generated/proto/config.js';
 import { dismissPopups } from '../browser/popups.js';
 import { navigateToBuildingsView, navigateToRecruitmentView, navigateToTradingView } from '../browser/navigation.js';
 import { login } from '../browser/login.js';
@@ -7,21 +7,12 @@ import { researchTechnology, clickFreeFinishButtons } from '../browser/actions.j
 import { checkPageHealth, waitForHealthyPage } from '../browser/health.js';
 import { escalatingRecovery, withRecovery } from '../browser/recovery.js';
 import { getCastles, CastleState } from '../game/castle.js';
-import { getUnits, CastleUnits } from '../game/units.js';
+import { getUnits } from '../game/units.js';
 import { getNextActionsForCastle } from '../client/solver.js';
 import { config } from '../config.js';
-import { CastlePhase, determineCastlePhase } from '../domain/index.js';
+import { determineCastlePhase } from '../domain/index.js';
 import { handleBuildingPhase, handleRecruitingPhase, handleTradingPhase } from './phases/index.js';
 import { printCastleStatus, printUnitsRecommendation, printUnitComparison, printCycleSummary, printSleepInfo } from './display.js';
-
-/** Castle with its determined phase and metadata */
-interface CastlePhaseInfo {
-  castle: CastleState;
-  castleIndex: number;
-  phase: CastlePhase;
-  missingUnits: Map<number, number>;
-  unitsRec?: UnitsRecommendation;
-}
 
 /** Calculate sleep time based on minimum time remaining */
 function calculateSleepTime(minTimeRemainingMs: number): number {
@@ -152,96 +143,53 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
     console.warn('[Loop] Free finish buttons failed, continuing...');
   }
 
-  // Check if there's research to do (non-critical)
-  try {
-    const { nextAction, nextResearchAction } = await getNextActionsForCastle(solverClient, castles[0]);
-
-    const shouldResearch = nextResearchAction &&
-      nextResearchAction.technology !== Technology.TECH_UNKNOWN &&
-      (!nextAction || nextResearchAction.startTimeSeconds <= nextAction.startTimeSeconds);
-
-    if (shouldResearch && nextResearchAction) {
-      console.log(`\nSolver recommends research first: ${technologyToJSON(nextResearchAction.technology)}`);
-      await researchTechnology(page, nextResearchAction.technology);
-    }
-  } catch (error) {
-    console.warn('[Loop] Research check failed, continuing...');
-  }
-
-  // Determine phase for each castle
-  const castlePhases: CastlePhaseInfo[] = [];
-
-  for (let i = 0; i < castles.length; i++) {
-    const castle = castles[i];
-    try {
-      const { unitsRecommendation } = await getNextActionsForCastle(solverClient, castle);
-      const { phase, missingUnits } = determineCastlePhase(unitsRecommendation, undefined);
-      castlePhases.push({
-        castle,
-        castleIndex: i,
-        phase,
-        missingUnits,
-        unitsRec: unitsRecommendation,
-      });
-    } catch (error) {
-      console.warn(`[Loop] Failed to get phase for castle ${castle.name}, defaulting to BUILDING`);
-      castlePhases.push({
-        castle,
-        castleIndex: i,
-        phase: CastlePhase.BUILDING,
-        missingUnits: new Map(),
-      });
-    }
-  }
-
-  // Check if any castle needs recruitment - if so, read current units
-  const needsRecruitmentCheck = castlePhases.some(cp => cp.phase !== CastlePhase.BUILDING);
-  let allCastleUnits: CastleUnits[] = [];
-
-  if (needsRecruitmentCheck) {
-    const onRecruitment = await withRecovery(
-      page,
-      'navigate-recruitment',
-      () => navigateToRecruitmentView(page),
-      false
-    );
-    
-    if (onRecruitment) {
-      // Health check after navigation (non-blocking)
-      const recruitHealth = await waitForHealthyPage(page, 'recruitment');
-      if (!recruitHealth.healthy) {
-        console.warn(`[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`);
-      }
-      
-      allCastleUnits = await withRecovery(page, 'get-units', () => getUnits(page), []);
-
-      // Re-determine phases with actual unit counts
-      for (const cp of castlePhases) {
-        if (cp.unitsRec?.buildOrderComplete) {
-          const castleUnits = allCastleUnits.find(cu => cu.name === cp.castle.name);
-          const currentUnits = castleUnits?.units.map(u => ({ type: u.type, count: u.count }));
-          const { phase, missingUnits } = determineCastlePhase(cp.unitsRec, currentUnits);
-          cp.phase = phase;
-          cp.missingUnits = missingUnits;
-        }
-      }
-    }
-  }
-
-  // Process each phase
+  // Track results
   let totalUpgrades = 0;
   let totalRecruits = 0;
   let totalTrades = 0;
   let minTimeRemainingMs: number | null = null;
 
-  // PHASE 1: Building
-  const buildingCastles = castlePhases.filter(cp => cp.phase === CastlePhase.BUILDING);
-  if (buildingCastles.length > 0) {
-    await withRecovery(page, 'navigate-buildings-phase', () => navigateToBuildingsView(page), false);
+  // Castles that completed building and need further phases
+  const castlesForRecruitment: { castle: CastleState; castleIndex: number; unitsRecommendation: any }[] = [];
 
-    for (const cp of buildingCastles) {
+  // ==================== PHASE 1: BUILDINGS (all castles) ====================
+  // Already on buildings view, process all castles
+  for (let castleIndex = 0; castleIndex < castles.length; castleIndex++) {
+    const castle = castles[castleIndex];
+    
+    let solverActions;
+    try {
+      solverActions = await getNextActionsForCastle(solverClient, castle);
+    } catch (error) {
+      console.warn(`[${castle.name}] Failed to get solver data, skipping castle`);
+      continue;
+    }
+
+    const { nextAction, nextResearchAction, unitsRecommendation } = solverActions;
+
+    // Check if research should be done first (only for first castle)
+    if (castleIndex === 0 && nextResearchAction) {
       try {
-        const result = await handleBuildingPhase(page, solverClient, cp.castle, cp.castleIndex);
+        const shouldResearch = nextResearchAction.technology !== Technology.TECH_UNKNOWN &&
+          (!nextAction || nextResearchAction.startTimeSeconds <= nextAction.startTimeSeconds);
+
+        if (shouldResearch) {
+          console.log(`\nSolver recommends research first: ${technologyToJSON(nextResearchAction.technology)}`);
+          await researchTechnology(page, nextResearchAction.technology);
+        }
+      } catch (error) {
+        console.warn('[Loop] Research failed, continuing...');
+      }
+    }
+
+    // Check if building phase is complete
+    if (unitsRecommendation?.buildOrderComplete) {
+      // Building done - queue for recruitment phase
+      castlesForRecruitment.push({ castle, castleIndex, unitsRecommendation });
+    } else {
+      // Still building
+      try {
+        const result = await handleBuildingPhase(page, castle, castleIndex, nextAction);
         if (result.upgraded) totalUpgrades++;
         if (result.minTimeRemainingMs !== null) {
           if (minTimeRemainingMs === null || result.minTimeRemainingMs < minTimeRemainingMs) {
@@ -249,58 +197,75 @@ async function runBotLoopInternal(page: Page, solverClient: CastleSolverServiceC
           }
         }
       } catch (error) {
-        console.warn(`[Loop] Building phase failed for ${cp.castle.name}, continuing...`);
+        console.warn(`[${castle.name}] Building phase failed, continuing...`);
       }
     }
   }
 
-  // PHASE 2: Recruiting
-  const recruitingCastles = castlePhases.filter(cp => cp.phase === CastlePhase.RECRUITING);
-  if (recruitingCastles.length > 0) {
-    await withRecovery(page, 'navigate-recruitment-phase', () => navigateToRecruitmentView(page), false);
-
-    for (const cp of recruitingCastles) {
-      try {
-        if (cp.unitsRec) {
-          const castleUnits = allCastleUnits.find(cu => cu.name === cp.castle.name);
-          printUnitComparison(cp.castle.name, castleUnits?.units.map(u => ({ type: u.type, count: u.count })), cp.unitsRec);
-        }
-
-        const result = await handleRecruitingPhase(page, cp.castle.name, cp.castleIndex, cp.missingUnits);
-        if (result.recruited) totalRecruits++;
-      } catch (error) {
-        console.warn(`[Loop] Recruiting phase failed for ${cp.castle.name}, continuing...`);
-      }
-    }
-  }
-
-  // PHASE 3: Trading
-  const tradingCastles = castlePhases.filter(cp => cp.phase === CastlePhase.TRADING);
-  if (tradingCastles.length > 0) {
-    const onTrading = await withRecovery(
+  // ==================== PHASE 2: RECRUITMENT (castles with complete buildings) ====================
+  if (castlesForRecruitment.length > 0) {
+    const onRecruitment = await withRecovery(
       page,
-      'navigate-trading',
-      () => navigateToTradingView(page),
+      'navigate-recruitment',
+      () => navigateToRecruitmentView(page),
       false
     );
-    
-    if (onTrading) {
-      // Health check after navigation (non-blocking)
-      const tradingHealth = await waitForHealthyPage(page, 'trading');
-      if (!tradingHealth.healthy) {
-        console.warn(`[Health] Trading view issues: ${tradingHealth.issues.join(', ')}`);
+
+    if (onRecruitment) {
+      const recruitHealth = await waitForHealthyPage(page, 'recruitment');
+      if (!recruitHealth.healthy) {
+        console.warn(`[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`);
       }
 
-      for (const cp of tradingCastles) {
-        try {
-          if (cp.unitsRec) {
-            printUnitsRecommendation(cp.castle.name, cp.unitsRec);
+      const allCastleUnits = await withRecovery(page, 'get-units', () => getUnits(page), []);
+      const castlesForTrading: { castle: CastleState; castleIndex: number; unitsRecommendation: any }[] = [];
+
+      for (const { castle, castleIndex, unitsRecommendation } of castlesForRecruitment) {
+        const castleUnits = allCastleUnits.find(cu => cu.name === castle.name);
+        const currentUnits = castleUnits?.units.map(u => ({ type: u.type, count: u.count }));
+        const { missingUnits } = determineCastlePhase(unitsRecommendation, currentUnits);
+
+        if (missingUnits.size > 0) {
+          // Need to recruit
+          printUnitComparison(castle.name, currentUnits, unitsRecommendation);
+          
+          try {
+            const result = await handleRecruitingPhase(page, castle.name, castleIndex, missingUnits);
+            if (result.recruited) totalRecruits++;
+          } catch (error) {
+            console.warn(`[${castle.name}] Recruiting phase failed, continuing...`);
+          }
+        } else {
+          // Units complete - queue for trading
+          castlesForTrading.push({ castle, castleIndex, unitsRecommendation });
+        }
+      }
+
+      // ==================== PHASE 3: TRADING (castles with complete units) ====================
+      if (castlesForTrading.length > 0) {
+        const onTrading = await withRecovery(
+          page,
+          'navigate-trading',
+          () => navigateToTradingView(page),
+          false
+        );
+
+        if (onTrading) {
+          const tradingHealth = await waitForHealthyPage(page, 'trading');
+          if (!tradingHealth.healthy) {
+            console.warn(`[Health] Trading view issues: ${tradingHealth.issues.join(', ')}`);
           }
 
-          const result = await handleTradingPhase(page, cp.castle.name, cp.castleIndex);
-          if (result.traded) totalTrades++;
-        } catch (error) {
-          console.warn(`[Loop] Trading phase failed for ${cp.castle.name}, continuing...`);
+          for (const { castle, castleIndex, unitsRecommendation } of castlesForTrading) {
+            printUnitsRecommendation(castle.name, unitsRecommendation);
+            
+            try {
+              const result = await handleTradingPhase(page, castle.name, castleIndex);
+              if (result.traded) totalTrades++;
+            } catch (error) {
+              console.warn(`[${castle.name}] Trading phase failed, continuing...`);
+            }
+          }
         }
       }
     }

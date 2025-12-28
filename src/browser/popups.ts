@@ -34,6 +34,14 @@ export async function dismissPopups(page: Page): Promise<void> {
       console.log('Clicked red accept button');
       await page.waitForTimeout(500);
     }
+
+    // Tutorial/help overlay close button
+    const tutorialCloseBtn = page.locator('.icon-tutorial.icon-close-button');
+    if (await tutorialCloseBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await tutorialCloseBtn.click();
+      console.log('Closed tutorial overlay');
+      await page.waitForTimeout(500);
+    }
   } catch {
     // Ignore popup dismissal errors
   }

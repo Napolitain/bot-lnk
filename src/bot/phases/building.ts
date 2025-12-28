@@ -1,9 +1,7 @@
 import { Page } from 'playwright';
-import { buildingTypeToJSON } from '../../generated/proto/config.js';
+import { BuildingAction, buildingTypeToJSON } from '../../generated/proto/config.js';
 import { CastleState } from '../../game/castle.js';
 import { upgradeBuilding } from '../../browser/actions.js';
-import { getNextActionsForCastle, SolverActions } from '../../client/solver.js';
-import { CastleSolverServiceClient } from '../../generated/proto/config.js';
 import { config } from '../../config.js';
 
 export interface BuildingPhaseResult {
@@ -14,9 +12,9 @@ export interface BuildingPhaseResult {
 /** Handle building phase for a single castle */
 export async function handleBuildingPhase(
   page: Page,
-  solverClient: CastleSolverServiceClient,
   castle: CastleState,
-  castleIndex: number
+  castleIndex: number,
+  nextAction?: BuildingAction
 ): Promise<BuildingPhaseResult> {
   let minTimeRemainingMs: number | null = null;
 
@@ -27,8 +25,6 @@ export async function handleBuildingPhase(
     return { upgraded: false, minTimeRemainingMs };
   }
 
-  const { nextAction } = await getNextActionsForCastle(solverClient, castle);
-
   let upgraded = false;
   if (nextAction && castle.buildingCanUpgrade.get(nextAction.buildingType)) {
     console.log(`\nSolver recommends: ${buildingTypeToJSON(nextAction.buildingType)} Lv ${nextAction.fromLevel} → ${nextAction.toLevel} for ${castle.name}`);
@@ -37,14 +33,13 @@ export async function handleBuildingPhase(
     console.log(`\n[${castle.name}] Solver recommends ${buildingTypeToJSON(nextAction.buildingType)} but cannot upgrade yet (waiting for resources)`);
   }
 
-  // Fallback: try to upgrade any available building
-  if (!upgraded) {
-    for (const [buildingType, canUpgrade] of castle.buildingCanUpgrade) {
-      if (canUpgrade) {
-        console.log(`\n[${castle.name}] Fallback: Upgrading ${buildingTypeToJSON(buildingType)}...`);
-        upgraded = await upgradeBuilding(page, castleIndex, buildingType);
-        if (upgraded) break;
-      }
+  // Log warning if solver didn't recommend anything but buildings are available
+  if (!upgraded && !nextAction) {
+    const availableBuildings = [...castle.buildingCanUpgrade.entries()]
+      .filter(([, canUpgrade]) => canUpgrade)
+      .map(([type]) => buildingTypeToJSON(type));
+    if (availableBuildings.length > 0) {
+      console.warn(`\n[${castle.name}] WARNING: Solver did not recommend any building, but ${availableBuildings.length} buildings can be upgraded: ${availableBuildings.join(', ')}`);
     }
   }
 
