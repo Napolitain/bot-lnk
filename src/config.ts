@@ -13,6 +13,9 @@ export const config = {
   // Block media routes (images, fonts, media) for RAM savings
   blockMedia: process.env.BLOCK_MEDIA === 'true',
 
+  // Enable performance metrics collection
+  enableMetrics: process.env.ENABLE_METRICS === 'true',
+
   // Persistent session directory
   userDataDir:
     process.env.USER_DATA_DIR || path.join(os.homedir(), '.bot-lnk-session'),

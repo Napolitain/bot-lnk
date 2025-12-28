@@ -29,6 +29,7 @@ import {
   technologyToJSON,
   type UnitsRecommendation,
 } from '../generated/proto/config.js';
+import type { MetricsCollector } from '../metrics/index.js';
 import {
   escalatingRecovery,
   waitForHealthy,
@@ -80,9 +81,10 @@ export interface BotLoopResult {
 export async function runBotLoop(
   page: Page,
   solverClient: CastleSolverServiceClient,
+  metricsCollector?: MetricsCollector,
 ): Promise<BotLoopResult> {
   try {
-    return await runBotLoopInternal(page, solverClient);
+    return await runBotLoopInternal(page, solverClient, metricsCollector);
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[Loop] Unexpected error: ${errorMsg}`);
@@ -102,6 +104,7 @@ export async function runBotLoop(
 async function runBotLoopInternal(
   page: Page,
   solverClient: CastleSolverServiceClient,
+  metricsCollector?: MetricsCollector,
 ): Promise<BotLoopResult> {
   // Always ensure we're on the game site first
   const currentUrl = page.url();
@@ -132,12 +135,15 @@ async function runBotLoopInternal(
   await dismissPopups(page);
 
   // Ensure we're logged in (this handles navigation and server selection)
+  metricsCollector?.startPeriod('login');
   const loggedIn = await withRecovery(
     page,
     () => login(page),
     gameRecoveryActions,
     false,
   );
+  await metricsCollector?.endPeriod();
+
   if (!loggedIn) {
     console.warn('[Loop] Login failed, dumping debug...');
     const { saveDebugContext } = await import('../utils/debug.js');
@@ -236,6 +242,8 @@ async function runBotLoopInternal(
 
   // ==================== PHASE 1: BUILDINGS (all castles) ====================
   // Already on buildings view, process all castles
+  metricsCollector?.startPeriod('buildings_phase');
+
   for (let castleIndex = 0; castleIndex < castles.length; castleIndex++) {
     const castle = castles[castleIndex];
 
@@ -299,8 +307,12 @@ async function runBotLoopInternal(
     }
   }
 
+  await metricsCollector?.endPeriod();
+
   // ==================== PHASE 2: RECRUITMENT (castles with complete buildings) ====================
   if (castlesForRecruitment.length > 0) {
+    metricsCollector?.startPeriod('recruitment_phase');
+
     const onRecruitment = await withRecovery(
       page,
       () => navigateToRecruitmentView(page),
@@ -374,6 +386,9 @@ async function runBotLoopInternal(
 
       // ==================== PHASE 3: TRADING (castles with complete units) ====================
       if (castlesForTrading.length > 0) {
+        await metricsCollector?.endPeriod();
+        metricsCollector?.startPeriod('trading_phase');
+
         const onTrading = await withRecovery(
           page,
           () => navigateToTradingView(page),
@@ -414,7 +429,13 @@ async function runBotLoopInternal(
             }
           }
         }
+
+        await metricsCollector?.endPeriod();
+      } else {
+        await metricsCollector?.endPeriod();
       }
+    } else {
+      await metricsCollector?.endPeriod();
     }
   }
 
