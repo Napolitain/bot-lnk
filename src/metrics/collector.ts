@@ -150,7 +150,9 @@ export class MetricsCollector {
         timestamp,
         usedJSHeapSize: heapUsage.usedSize,
         totalJSHeapSize: heapUsage.totalSize,
-        jsHeapSizeLimit: heapUsage.usedSize * 2, // estimate
+        // Note: CDP doesn't provide heap limit directly. Using totalSize as a reasonable proxy.
+        // For precise limits, consider using performance.memory API if available.
+        jsHeapSizeLimit: heapUsage.totalSize,
         ...domStats,
       };
     } catch (error) {

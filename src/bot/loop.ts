@@ -386,6 +386,7 @@ async function runBotLoopInternal(
 
       // ==================== PHASE 3: TRADING (castles with complete units) ====================
       if (castlesForTrading.length > 0) {
+        // End recruitment phase before starting trading
         await metricsCollector?.endPeriod();
         metricsCollector?.startPeriod('trading_phase');
 
@@ -430,11 +431,14 @@ async function runBotLoopInternal(
           }
         }
 
+        // End trading phase
         await metricsCollector?.endPeriod();
       } else {
+        // No trading needed, end recruitment phase
         await metricsCollector?.endPeriod();
       }
     } else {
+      // No recruitment needed, end buildings phase
       await metricsCollector?.endPeriod();
     }
   }
