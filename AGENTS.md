@@ -1,5 +1,24 @@
 # Bot-LNK Agent Notes
 
+## Quick Reference
+
+```bash
+# Setup (first time)
+git clone --recursive git@github.com:Napolitain/bot-lnk.git
+npm install
+npx playwright install chromium
+npm run proto:generate
+
+# Daily workflow
+npm run build              # Compile TypeScript
+npm start                  # Run bot (cleans logs first)
+npm run start:keep-logs    # Run without cleaning logs
+
+# After proto changes
+cd proto && git pull origin master && cd ..
+npm run proto:generate
+```
+
 ## Architecture
 
 ```
@@ -30,7 +49,7 @@ src/
 │   └── mappings.ts       # Game constants
 │
 ├── domain/               # Pure game logic (no I/O)
-│   └── phase.ts          # Phase determination
+│   └── castle.ts         # Phase determination
 │
 ├── client/               # External services
 │   └── solver.ts         # gRPC client
