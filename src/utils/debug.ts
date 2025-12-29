@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Locator, Page } from 'playwright';
 import { config } from '../config.js';
+import { isPageValid } from './screenshot.js';
 
 /** Get HTML of element with parent and children context */
 async function getElementContext(locator: Locator): Promise<string> {
@@ -59,6 +60,11 @@ export async function dumpElementContext(
   selector: string,
   prefix: string,
 ): Promise<string | null> {
+  // Skip silently if page is closed
+  if (!isPageValid(page)) {
+    return null;
+  }
+
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const debugDir = path.join(config.userDataDir, 'debug-dumps');
@@ -90,7 +96,11 @@ export async function dumpElementContext(
     console.log(`[Debug] HTML dump saved: ${filePath}`);
     return filePath;
   } catch (e) {
-    console.error('[Debug] Failed to dump element context:', e);
+    // Only log if it's not a "closed" error
+    const msg = String(e);
+    if (!msg.includes('closed')) {
+      console.error('[Debug] Failed to dump element context:', e);
+    }
     return null;
   }
 }

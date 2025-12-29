@@ -1,0 +1,21 @@
+[Unit]
+Description=Lords and Knights Bot
+After=network.target solver-lnk.service
+Wants=solver-lnk.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/napolitain/Repos/bot-lnk
+ExecStart=/home/napolitain/.nvm/versions/node/v25.2.1/bin/node dist/index.js
+Restart=always
+RestartSec=10
+
+# Environment
+Environment=NODE_ENV=production
+
+# Logging (stdout/stderr go to journald)
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

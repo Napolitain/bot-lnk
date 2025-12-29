@@ -11,6 +11,15 @@ import type {
 } from '../resilience/index.js';
 import { dismissPopups } from './popups.js';
 
+/** Check if page is still usable (not closed) */
+function isPageValid(page: Page): boolean {
+  try {
+    return !page.isClosed();
+  } catch {
+    return false;
+  }
+}
+
 /** Game URL patterns */
 const GAME_URL_PATTERNS = [/lordsandknights\.com/, /lnk\./];
 
@@ -132,6 +141,7 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
     {
       name: 'dismiss_popups',
       execute: async (page: Page) => {
+        if (!isPageValid(page)) return false;
         await dismissPopups(page);
         await page.waitForTimeout(1000);
         return true;
@@ -140,6 +150,7 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
     {
       name: 'wait_and_retry',
       execute: async (page: Page) => {
+        if (!isPageValid(page)) return false;
         await page.waitForTimeout(3000);
         await dismissPopups(page);
         return true;
@@ -148,6 +159,7 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
     {
       name: 'reload_page',
       execute: async (page: Page) => {
+        if (!isPageValid(page)) return false;
         await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
         await page.waitForTimeout(3000);
         await dismissPopups(page);
@@ -157,6 +169,7 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
     {
       name: 'navigate_home',
       execute: async (page: Page) => {
+        if (!isPageValid(page)) return false;
         await page.goto('https://lordsandknights.com/', {
           waitUntil: 'networkidle',
           timeout: 30000,
@@ -169,6 +182,7 @@ export function createGameRecoveryActions(): RecoveryAction<Page>[] {
     {
       name: 'full_reset',
       execute: async (page: Page) => {
+        if (!isPageValid(page)) return false;
         const browserContext = page.context();
         await browserContext.clearCookies();
         await page.goto('https://lordsandknights.com/', {

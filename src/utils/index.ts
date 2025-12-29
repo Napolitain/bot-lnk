@@ -16,4 +16,4 @@ export {
   pollUntil,
   waitWithEarlyExit,
 } from './polling.js';
-export { formatError, saveScreenshot } from './screenshot.js';
+export { formatError, isPageValid, saveScreenshot } from './screenshot.js';

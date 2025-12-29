@@ -104,6 +104,7 @@ export async function retry<T>(
 
 /**
  * Execute recovery actions in order until one succeeds
+ * Short-circuits if an action returns false (e.g., page closed)
  */
 export async function escalatingRecovery<TContext>(
   ctx: TContext,
@@ -124,11 +125,21 @@ export async function escalatingRecovery<TContext>(
           message: 'Recovery successful',
         };
       }
+      // Action returned false (e.g., page closed) - stop trying
+      console.log(`[Recovery] ${action.name} returned false, stopping recovery chain`);
+      break;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.warn(`[Recovery] ${action.name} failed: ${errorMsg}`);
-      if (onFailure) {
-        await onFailure(action, errorMsg);
+      // Don't log "closed" errors - they're expected after context restart
+      if (!errorMsg.includes('closed')) {
+        console.warn(`[Recovery] ${action.name} failed: ${errorMsg}`);
+        if (onFailure) {
+          await onFailure(action, errorMsg);
+        }
+      } else {
+        // Page/context closed - stop trying other actions
+        console.log(`[Recovery] Context closed, stopping recovery chain`);
+        break;
       }
     }
   }
@@ -203,6 +214,7 @@ export function checkStale(
 
 /**
  * Wrap an action with automatic recovery on failure
+ * Silently returns default value if context is closed
  */
 export async function withRecovery<TContext, T>(
   ctx: TContext,
@@ -214,6 +226,12 @@ export async function withRecovery<TContext, T>(
     return await action();
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
+    
+    // If context is closed, don't bother with recovery
+    if (errorMsg.includes('closed')) {
+      return defaultValue;
+    }
+    
     console.warn(`[withRecovery] Action failed: ${errorMsg}`);
 
     const recovery = await escalatingRecovery(ctx, recoveryActions);
@@ -222,8 +240,11 @@ export async function withRecovery<TContext, T>(
       // Retry action after recovery
       try {
         return await action();
-      } catch (_retryError) {
-        console.warn(`[withRecovery] Retry after recovery failed`);
+      } catch (retryError) {
+        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+        if (!retryMsg.includes('closed')) {
+          console.warn(`[withRecovery] Retry after recovery failed`);
+        }
       }
     }
 

@@ -76,6 +76,38 @@ npm run start:keep-logs
 npm run build
 ```
 
+### Running as a Service (Recommended)
+
+Use the systemd service for automatic restarts on crash/OOM:
+
+```bash
+# Install and enable the service
+./bot.sh install
+
+# Start the bot
+./bot.sh start
+
+# View live logs
+./bot.sh logs
+
+# Stop the bot
+./bot.sh stop
+
+# Restart (rebuilds first)
+./bot.sh restart
+
+# Check status
+./bot.sh status
+
+# Uninstall the service
+./bot.sh uninstall
+```
+
+The service will:
+- Automatically restart on crash or OOM
+- Keep running after logout (via lingering)
+- Limit memory to 800MB (configurable in `systemd/bot-lnk.service`)
+
 ## Project Structure
 
 ```
@@ -122,6 +154,9 @@ bot-lnk/
 │   │
 │   └── utils/                # General utilities
 │
+├── systemd/                  # Systemd service files
+│   └── bot-lnk.service       # User service definition
+├── bot.sh                    # Service management script
 ├── proto/                    # Submodule → proto-lnk
 ├── docs/                     # Documentation
 │   └── METRICS.md            # Performance metrics guide

@@ -126,13 +126,17 @@ async function main() {
   let lastSnapshot: StateSnapshot | null = null;
   let cycleCount = 0;
   let contextRestartCount = 0;
+  let lastSleepMs = 0; // Track last sleep duration to skip memory check after long idle
 
   // Main bot loop - NEVER exits unless dry run or context closes
   while (true) {
     cycleCount++;
 
     // Check system memory before each cycle
-    const memCheck = shouldRestartForMemory();
+    // Skip if we just woke from a long sleep (>5min) - browser was idle, low RAM is just OS paging
+    const skipMemoryCheck = lastSleepMs > 5 * 60 * 1000;
+    const memCheck = skipMemoryCheck ? { shouldRestart: false, reason: null } : shouldRestartForMemory();
+    
     if (memCheck.shouldRestart && memCheck.reason) {
       console.warn(`[Memory] ${memCheck.reason}`);
       console.log('[Memory] Restarting browser context to free memory...');
@@ -237,6 +241,7 @@ async function main() {
 
     // Use suggested sleep time if available, otherwise use default interval
     const sleepMs = result.sleepMs ?? config.loopIntervalMs;
+    lastSleepMs = sleepMs; // Track for next cycle's memory check skip logic
     console.log(
       `\nWaiting ${Math.round(sleepMs / 1000)} seconds before next check...`,
     );

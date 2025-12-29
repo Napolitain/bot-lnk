@@ -3,11 +3,25 @@ import * as path from 'node:path';
 import type { Page } from 'playwright';
 import { config } from '../config.js';
 
+/** Check if page is still usable (not closed) */
+export function isPageValid(page: Page): boolean {
+  try {
+    return !page.isClosed();
+  } catch {
+    return false;
+  }
+}
+
 /** Save a screenshot for debugging */
 export async function saveScreenshot(
   page: Page,
   prefix: string,
 ): Promise<string | null> {
+  // Skip silently if page is closed (e.g., after context restart)
+  if (!isPageValid(page)) {
+    return null;
+  }
+
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const screenshotDir = path.join(config.userDataDir, 'error-screenshots');
@@ -20,7 +34,11 @@ export async function saveScreenshot(
     console.log(`[Screenshot] Saved: ${screenshotPath}`);
     return screenshotPath;
   } catch (e) {
-    console.error('[Screenshot] Failed to save:', e);
+    // Only log if it's not a "closed" error
+    const msg = String(e);
+    if (!msg.includes('closed')) {
+      console.error('[Screenshot] Failed to save:', e);
+    }
     return null;
   }
 }
