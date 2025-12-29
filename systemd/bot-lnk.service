@@ -1,21 +1,47 @@
+# Example systemd service for bot-lnk
+# Copy to /etc/systemd/system/bot-lnk.service and adjust paths
+#
+# Install:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable bot-lnk.service
+#   sudo systemctl start bot-lnk.service
+#
+# Status:
+#   systemctl status bot-lnk --no-pager
+#   journalctl -u bot-lnk -f
+
 [Unit]
-Description=Lords and Knights Bot
+Description=Lords and Knights Bot (Playwright)
 After=network.target solver-lnk.service
 Wants=solver-lnk.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/napolitain/Repos/bot-lnk
-ExecStart=/home/napolitain/.nvm/versions/node/v25.2.1/bin/node dist/index.js
+
+# TODO: Change to your user/group
+User=YOUR_USER
+Group=YOUR_USER
+
+# TODO: Change to your repo path
+WorkingDirectory=/path/to/bot-lnk
+
+# TODO: Change to your node binary path (run: which node)
+ExecStart=/path/to/node dist/index.js
+
 Restart=always
 RestartSec=10
 
-# Environment
+# TODO: Uncomment and set path to load .env file
+# EnvironmentFile=/path/to/bot-lnk/.env
 Environment=NODE_ENV=production
 
-# Logging (stdout/stderr go to journald)
+# Logging: stdout to journal, stderr discarded
 StandardOutput=journal
-StandardError=journal
+StandardError=null
+
+# Basic hardening (Playwright-compatible)
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
