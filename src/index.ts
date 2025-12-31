@@ -10,6 +10,7 @@ import {
   printSummary,
 } from './metrics/index.js';
 import { checkStale, type StateSnapshot } from './resilience/index.js';
+import { createSystemdWatchdog, type SystemdWatchdog } from './systemd/watchdog.js';
 import {
   cleanupDebugDumps,
   formatError,
@@ -103,11 +104,19 @@ async function initializeMetrics(
   }
 }
 
+// Watchdog instance for shutdown handlers
+let watchdogInstance: SystemdWatchdog | null = null;
+
 async function main() {
   // Validate config
   validateConfig();
 
   console.log(`Using persistent session at: ${config.userDataDir}`);
+
+  // Create systemd watchdog (auto-detects, no-op if not running under systemd)
+  const watchdog = createSystemdWatchdog();
+  watchdogInstance = watchdog; // Store for shutdown handlers
+  watchdog.start();
 
   // Create initial browser context
   let { context, page } = await createBrowserContext();
@@ -168,6 +177,9 @@ async function main() {
     }
 
     const result = await runBotLoop(page, solverClient, metricsCollector);
+
+    // Ping watchdog after successful cycle
+    await watchdog.notify();
 
     if (!result.success) {
       console.warn(
@@ -262,9 +274,28 @@ async function main() {
   await context.close();
 }
 
-// Top-level error handler - should almost never trigger now
+// Shutdown handlers
 main().catch((e) => {
   console.error('[FATAL] Unhandled error in main:', formatError(e));
   console.error('[FATAL] This should not happen - please report this bug');
+  if (watchdogInstance) {
+    watchdogInstance.stop();
+  }
   process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Received SIGTERM, shutting down gracefully...');
+  if (watchdogInstance) {
+    watchdogInstance.stop();
+  }
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('\n🛑 Received SIGINT, shutting down gracefully...');
+  if (watchdogInstance) {
+    watchdogInstance.stop();
+  }
+  process.exit(0);
 });

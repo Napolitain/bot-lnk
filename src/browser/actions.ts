@@ -14,6 +14,7 @@ import {
 } from '../generated/proto/config.js';
 import { saveDebugContext } from '../utils/index.js';
 import { checkGameHealth, dismissIfOverlay } from './gameHealth.js';
+import { navigateToCastleLibrary } from './navigation.js';
 import { dismissPopups } from './popups.js';
 
 /** Get current upgrade queue count for a castle by counting buildings with multiple cells */
@@ -232,6 +233,7 @@ export async function upgradeBuilding(
 export async function researchTechnology(
   page: Page,
   technology: Technology,
+  castleIndex: number,
 ): Promise<boolean> {
   const techName = TECHNOLOGY_TO_NAME[technology];
   if (!techName) {
@@ -250,33 +252,50 @@ export async function researchTechnology(
       return true;
     }
 
-    // Click on Library button to open research menu
-    const libraryBtn = page.getByRole('button', { name: 'Library' });
-    if (await libraryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await libraryBtn.click();
-      await page.waitForTimeout(500);
-      await dismissPopups(page);
+    // Navigate to Library menu
+    const navSuccess = await navigateToCastleLibrary(page, castleIndex);
+    if (!navSuccess) {
+      console.warn(`Failed to navigate to Library for castle ${castleIndex}`);
+      return false;
     }
 
-    // Click on the technology name
-    const techBtn = page.getByText(techName, { exact: true });
-    if (await techBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await techBtn.click();
-      await page.waitForTimeout(500);
-      await dismissPopups(page);
-
-      // Verify page health
-      if (!(await verifyPostAction(page, 'researchTechnology', techSelector))) {
-        return false;
-      }
-
-      console.log(`Started research: ${techName}`);
-      return true;
-    } else {
+    // Find the technology row by name, then click the button within it
+    const techRow = page.locator('.menu-list-element-basic').filter({
+      hasText: techName,
+    });
+    
+    if (!(await techRow.isVisible({ timeout: 3000 }).catch(() => false))) {
       console.log(
         `Technology ${techName} not visible (may already be researched or not available)`,
       );
+      return false;
     }
+
+    // Click the button within the technology row
+    const researchBtn = techRow.locator('button.button');
+    if (!(await researchBtn.isVisible({ timeout: 1000 }).catch(() => false))) {
+      console.log(`Research button not found for ${techName}`);
+      return false;
+    }
+
+    // Check if button is disabled
+    const isDisabled = await researchBtn.evaluate(el => el.classList.contains('disabled'));
+    if (isDisabled) {
+      console.log(`Research button disabled for ${techName} (insufficient resources or already researching)`);
+      return false;
+    }
+
+    await researchBtn.click();
+    await page.waitForTimeout(500);
+    await dismissPopups(page);
+
+    // Verify page health
+    if (!(await verifyPostAction(page, 'researchTechnology', techSelector))) {
+      return false;
+    }
+
+    console.log(`Started research: ${techName}`);
+    return true;
   } catch (e) {
     console.error(`Failed to research ${techName}:`, e);
     await saveDebugContext(page, 'research-failed', techSelector);

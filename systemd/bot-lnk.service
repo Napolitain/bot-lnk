@@ -1,14 +1,17 @@
-# Example systemd service for bot-lnk
-# Copy to /etc/systemd/system/bot-lnk.service and adjust paths
+# Systemd service for bot-lnk with watchdog support
 #
 # Install:
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable bot-lnk.service
-#   sudo systemctl start bot-lnk.service
+#   1. Edit paths below (User, WorkingDirectory, ExecStart, EnvironmentFile)
+#   2. sudo cp systemd/bot-lnk.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable bot-lnk.service
+#   5. sudo systemctl start bot-lnk.service
 #
-# Status:
+# Monitor:
 #   systemctl status bot-lnk --no-pager
 #   journalctl -u bot-lnk -f
+#
+# See docs/SYSTEMD_WATCHDOG.md for details on watchdog support
 
 [Unit]
 Description=Lords and Knights Bot (Playwright)
@@ -16,7 +19,10 @@ After=network.target solver-lnk.service
 Wants=solver-lnk.service
 
 [Service]
-Type=simple
+# Type=notify enables systemd watchdog support
+# The bot will send "I'm alive" pings to systemd
+Type=notify
+NotifyAccess=main
 
 # TODO: Change to your user/group
 User=YOUR_USER
@@ -28,8 +34,10 @@ WorkingDirectory=/path/to/bot-lnk
 # TODO: Change to your node binary path (run: which node)
 ExecStart=/path/to/node dist/index.js
 
-Restart=always
-RestartSec=10
+# Watchdog: restart if no ping for 5 minutes
+WatchdogSec=300
+Restart=on-watchdog
+RestartSec=30
 
 # TODO: Uncomment and set path to load .env file
 # EnvironmentFile=/path/to/bot-lnk/.env

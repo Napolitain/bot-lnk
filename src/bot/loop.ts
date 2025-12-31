@@ -272,7 +272,7 @@ async function runBotLoopInternal(
               console.log(
                 `\nSolver recommends research: ${nextAction.research.technologyName || 'Unknown'}`,
               );
-              await researchTechnology(page, nextAction.research.technology);
+              await researchTechnology(page, nextAction.research.technology, castleIndex);
             }
             break;
 

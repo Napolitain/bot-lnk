@@ -98,8 +98,8 @@ export async function navigateToRecruitmentView(page: Page): Promise<boolean> {
 }
 
 /**
- * Navigate to a castle's Keep menu for trading.
- * Path: Global buildings view → Castle row → Buildings menu → Keep
+ * Navigate to Keep menu for trading (uses per-castle buildings sidebar).
+ * Path: Buildings button → Keep in sidebar
  */
 export async function navigateToCastleKeep(
   page: Page,
@@ -112,57 +112,22 @@ export async function navigateToCastleKeep(
     return true;
   }
 
-  // First ensure we're on the global buildings view
-  if (!(await isOnBuildingsView(page))) {
-    const navSuccess = await navigateToBuildingsView(page);
-    if (!navSuccess) {
-      console.warn('[navigateToCastleKeep] Could not navigate to buildings view');
-      return false;
-    }
+  // First click the "Buildings" button to ensure we're in buildings context
+  const buildingsBtn = page.getByText('Buildings');
+  if (await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await buildingsBtn.click();
+    await page.waitForTimeout(500);
+    await dismissPopups(page);
   }
 
-  // Click on the castle row to open the per-castle menu
-  const castleRows = page.locator(
-    '.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)',
-  );
-  const row = castleRows.nth(castleIndex);
-
-  // Click on the castle name cell to open per-castle building menu
-  const castleNameCell = row.locator('.tabular-cell--upgrade-building').first();
-  if (!(await castleNameCell.isVisible({ timeout: 2000 }).catch(() => false))) {
-    console.warn(`[navigateToCastleKeep] Castle row ${castleIndex} not visible`);
+  // Click "Keep" in the per-castle buildings sidebar
+  const keepBtn = page.locator('#menu-section-general-container').getByText('Keep');
+  if (!(await keepBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+    console.warn('[navigateToCastleKeep] Keep button not found in sidebar');
     return false;
   }
 
-  await castleNameCell.click();
-  await page.waitForTimeout(500);
-  await dismissPopups(page);
-
-  // Wait for castle building menu to appear
-  const menuOpened = await pollUntil(
-    async () => {
-      await dismissPopups(page);
-      return await isCastleBuildingMenuOpen(page);
-    },
-    { timeout: 5000, interval: 500, description: 'castle building menu' },
-  );
-
-  if (!menuOpened) {
-    console.warn('[navigateToCastleKeep] Castle building menu did not open');
-    return false;
-  }
-
-  // Click on Keep building row
-  const keepRow = page.locator('.menu-list-element-basic.clickable').filter({
-    has: page.locator('.icon-building--keep'),
-  });
-
-  if (!(await keepRow.isVisible({ timeout: 2000 }).catch(() => false))) {
-    console.warn('[navigateToCastleKeep] Keep building not found in menu');
-    return false;
-  }
-
-  await keepRow.click();
+  await keepBtn.click();
   await page.waitForTimeout(500);
   await dismissPopups(page);
 
@@ -196,8 +161,8 @@ async function isTavernMenuOpen(page: Page): Promise<boolean> {
 }
 
 /**
- * Navigate to a castle's Tavern menu for missions.
- * Path: Global buildings view → Castle row → Buildings menu → Tavern
+ * Navigate to Tavern menu for missions (uses per-castle buildings sidebar).
+ * Path: Buildings button → Tavern in sidebar
  */
 export async function navigateToCastleTavern(
   page: Page,
@@ -210,57 +175,22 @@ export async function navigateToCastleTavern(
     return true;
   }
 
-  // First ensure we're on the global buildings view
-  if (!(await isOnBuildingsView(page))) {
-    const navSuccess = await navigateToBuildingsView(page);
-    if (!navSuccess) {
-      console.warn('[navigateToCastleTavern] Could not navigate to buildings view');
-      return false;
-    }
+  // First click the "Buildings" button to ensure we're in buildings context
+  const buildingsBtn = page.getByText('Buildings');
+  if (await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await buildingsBtn.click();
+    await page.waitForTimeout(500);
+    await dismissPopups(page);
   }
 
-  // Click on the castle row to open the per-castle menu
-  const castleRows = page.locator(
-    '.table--global-overview--buildings .tabular-row:not(.global-overview--table--header)',
-  );
-  const row = castleRows.nth(castleIndex);
-
-  // Click on the castle name cell to open per-castle building menu
-  const castleNameCell = row.locator('.tabular-cell--upgrade-building').first();
-  if (!(await castleNameCell.isVisible({ timeout: 2000 }).catch(() => false))) {
-    console.warn(`[navigateToCastleTavern] Castle row ${castleIndex} not visible`);
+  // Click "Tavern" in the per-castle buildings sidebar
+  const tavernBtn = page.locator('#menu-section-general-container').getByText('Tavern');
+  if (!(await tavernBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+    console.warn('[navigateToCastleTavern] Tavern button not found in sidebar');
     return false;
   }
 
-  await castleNameCell.click();
-  await page.waitForTimeout(500);
-  await dismissPopups(page);
-
-  // Wait for castle building menu to appear
-  const menuOpened = await pollUntil(
-    async () => {
-      await dismissPopups(page);
-      return await isCastleBuildingMenuOpen(page);
-    },
-    { timeout: 5000, interval: 500, description: 'castle building menu' },
-  );
-
-  if (!menuOpened) {
-    console.warn('[navigateToCastleTavern] Castle building menu did not open');
-    return false;
-  }
-
-  // Click on Tavern building row
-  const tavernRow = page.locator('.menu-list-element-basic.clickable').filter({
-    has: page.locator('.icon-building--tavern'),
-  });
-
-  if (!(await tavernRow.isVisible({ timeout: 2000 }).catch(() => false))) {
-    console.warn('[navigateToCastleTavern] Tavern building not found in menu');
-    return false;
-  }
-
-  await tavernRow.click();
+  await tavernBtn.click();
   await page.waitForTimeout(500);
   await dismissPopups(page);
 
@@ -275,6 +205,68 @@ export async function navigateToCastleTavern(
 
   if (!tavernOpened) {
     console.warn('[navigateToCastleTavern] Tavern menu did not open');
+    return false;
+  }
+
+  return true;
+}
+
+/** Check if Library menu is open (shows research technologies) */
+async function isLibraryMenuOpen(page: Page): Promise<boolean> {
+  try {
+    // Look for any technology name to confirm Library menu is open
+    const techSection = page.locator('.menu-list-title-basic, .menu-list-element-basic');
+    return await techSection.first().isVisible({ timeout: 500 });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Navigate to Library menu for research (uses global buildings sidebar).
+ * Path: Buildings button → Library in sidebar
+ */
+export async function navigateToCastleLibrary(
+  page: Page,
+  castleIndex: number,
+): Promise<boolean> {
+  await dismissPopups(page);
+
+  // If already in Library menu, we're done
+  if (await isLibraryMenuOpen(page)) {
+    return true;
+  }
+
+  // First click the "Buildings" button to ensure we're in buildings context
+  const buildingsBtn = page.getByText('Buildings');
+  if (await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await buildingsBtn.click();
+    await page.waitForTimeout(500);
+    await dismissPopups(page);
+  }
+
+  // Click "Library" in the global buildings sidebar
+  const libraryBtn = page.locator('#menu-section-general-container').getByText('Library');
+  if (!(await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+    console.warn('[navigateToCastleLibrary] Library button not found in sidebar');
+    return false;
+  }
+
+  await libraryBtn.click();
+  await page.waitForTimeout(500);
+  await dismissPopups(page);
+
+  // Wait for Library menu to open
+  const libraryOpened = await pollUntil(
+    async () => {
+      await dismissPopups(page);
+      return await isLibraryMenuOpen(page);
+    },
+    { timeout: 5000, interval: 500, description: 'library menu' },
+  );
+
+  if (!libraryOpened) {
+    console.warn('[navigateToCastleLibrary] Library menu did not open');
     return false;
   }
 
