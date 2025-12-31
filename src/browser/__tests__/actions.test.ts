@@ -183,14 +183,17 @@ describe('researchTechnology', () => {
     const { page, clicks } = createMockPage({
       technologyVisible: true,
       pageHealthy: true,
+      libraryMenuOpensAfterClick: true,
+      buildingSidebarVisible: true,
+      initialView: 'library', // Already in library menu
     });
 
     const result = await researchTechnology(page, Technology.BEER_TESTER, 0);
 
     expect(result).toBe(true);
 
-    // Should click the technology button
-    expect(clicks.some((s) => s.includes('Beer tester'))).toBe(true);
+    // Should click the technology button (within techRow)
+    expect(clicks.some((s) => s.includes('button.button'))).toBe(true);
   });
 
   it('returns false when navigation to library fails', async () => {
@@ -220,24 +223,34 @@ describe('researchTechnology', () => {
   });
 
   it('uses correct technology name from TECHNOLOGY_TO_NAME mapping', async () => {
-    const { page, clicks } = createMockPage({
+    const { page, clicks, locators } = createMockPage({
       technologyVisible: true,
+      libraryMenuOpensAfterClick: true,
+      buildingSidebarVisible: true,
+      initialView: 'library',
     });
 
     await researchTechnology(page, Technology.BEER_TESTER, 0);
 
-    // Should use exact name from mapping
-    expect(clicks.some((s) => s.includes('Beer tester'))).toBe(true);
+    // Should filter by technology name from mapping
+    expect(locators.some((s) => s.includes('filter(hasText:Beer tester)'))).toBe(
+      true,
+    );
   });
 
   it('handles different technologies correctly', async () => {
-    const { page, clicks } = createMockPage({
+    const { page, locators } = createMockPage({
       technologyVisible: true,
+      libraryMenuOpensAfterClick: true,
+      buildingSidebarVisible: true,
+      initialView: 'library',
     });
 
     await researchTechnology(page, Technology.LONGBOW, 0);
 
-    expect(clicks.some((s) => s.includes('Longbow'))).toBe(true);
+    expect(locators.some((s) => s.includes('filter(hasText:Longbow)'))).toBe(
+      true,
+    );
   });
 
   it('returns false for unknown technology', async () => {
