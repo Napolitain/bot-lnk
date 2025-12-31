@@ -233,9 +233,9 @@ describe('researchTechnology', () => {
     await researchTechnology(page, Technology.BEER_TESTER, 0);
 
     // Should filter by technology name from mapping
-    expect(locators.some((s) => s.includes('filter(hasText:Beer tester)'))).toBe(
-      true,
-    );
+    expect(
+      locators.some((s) => s.includes('filter(hasText:Beer tester)')),
+    ).toBe(true);
   });
 
   it('handles different technologies correctly', async () => {
