@@ -4,3 +4,4 @@ dist/
 *.log
 src/generated/
 .bot-lnk-session/
+debug/

@@ -420,27 +420,34 @@ export async function executeTrade(
   page: Page,
   castleIndex: number,
 ): Promise<boolean> {
-  const rowSelector = `.table--global-overview--trading .tabular-row:not(.global-overview--table--header):nth-child(${castleIndex + 2})`;
-
   try {
     await dismissPopups(page);
 
-    // Find the castle row in trading view
-    const castleRows = page.locator(
-      '.table--global-overview--trading .tabular-row:not(.global-overview--table--header)',
-    );
-    const row = castleRows.nth(castleIndex);
+    // Click "Trade for Silver" button in Keep menu
+    // The button has class pattern: button--in-building-list--trade
+    const tradeBtn = page.locator('button.button--in-building-list--trade');
 
-    // Click the trade button for this castle (usually "Trade" or similar)
-    const tradeBtn = row.locator('button.button--action').first();
-    if ((await tradeBtn.count()) === 0) {
-      console.log(`No trade button found for castle ${castleIndex}`);
+    if (!(await tradeBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+      console.warn(
+        `[executeTrade] Trade button not found for castle ${castleIndex} - Keep menu may not be open`,
+      );
+      return false;
+    }
+
+    // Check if button is disabled
+    const isDisabled = await tradeBtn
+      .evaluate((el) => el.classList.contains('disabled'))
+      .catch(() => false);
+    if (isDisabled) {
+      console.log(
+        `[executeTrade] Trade button disabled for castle ${castleIndex}`,
+      );
       return false;
     }
 
     if (config.dryRun) {
       console.log(
-        `[DRY RUN] Would open trade dialog for castle ${castleIndex}`,
+        `[DRY RUN] Would click trade button for castle ${castleIndex}`,
       );
       return true;
     }
@@ -449,7 +456,7 @@ export async function executeTrade(
     await page.waitForTimeout(1000);
     await dismissPopups(page);
 
-    // Verify dialog opened (look for trade dialog elements)
+    // Verify trade dialog opened (look for trade dialog elements)
     const dialogVisible = await page
       .locator('.menu--content-section')
       .isVisible({ timeout: 2000 })
@@ -458,11 +465,10 @@ export async function executeTrade(
       console.warn(
         `[executeTrade] Trade dialog did not open for castle ${castleIndex}`,
       );
-      await saveDebugContext(page, 'trade-dialog-failed', rowSelector);
+      await saveDebugContext(page, 'trade-dialog-failed');
       return false;
     }
 
-    // Now we should be in the trade dialog
     // Click "Max" buttons to maximize transport units
     const maxButtons = page.locator('.seek-bar-increase-value--button');
     const maxCount = await maxButtons.count();
@@ -499,43 +505,90 @@ export async function executeTrade(
 
       console.log(`Executed trade for castle ${castleIndex}`);
       return true;
-    } else {
-      // Try any action button in the dialog
-      const anyConfirmBtn = page
-        .locator('.menu--content-section button.button--action')
-        .last();
+    }
+
+    // Try any action button in the dialog
+    const anyConfirmBtn = page
+      .locator('.menu--content-section button.button--action')
+      .last();
+    if (
+      (await anyConfirmBtn.count()) > 0 &&
+      (await anyConfirmBtn.isEnabled())
+    ) {
+      await anyConfirmBtn.click();
+      await page.waitForTimeout(500);
+
       if (
-        (await anyConfirmBtn.count()) > 0 &&
-        (await anyConfirmBtn.isEnabled())
+        !(await verifyPostAction(
+          page,
+          'executeTrade',
+          '.menu--content-section',
+        ))
       ) {
-        await anyConfirmBtn.click();
-        await page.waitForTimeout(500);
-
-        if (
-          !(await verifyPostAction(
-            page,
-            'executeTrade',
-            '.menu--content-section',
-          ))
-        ) {
-          return false;
-        }
-
-        console.log(`Executed trade for castle ${castleIndex}`);
-        return true;
+        return false;
       }
+
+      console.log(`Executed trade for castle ${castleIndex}`);
+      return true;
     }
 
     console.log(`Could not find confirm button for trade`);
-    await saveDebugContext(
-      page,
-      'trade-confirm-not-found',
-      '.menu--content-section',
-    );
+    await saveDebugContext(page, 'trade-confirm-not-found');
     return false;
   } catch (e) {
     console.error(`Failed to execute trade for castle ${castleIndex}:`, e);
-    await saveDebugContext(page, 'trade-failed', rowSelector);
+    await saveDebugContext(page, 'trade-failed');
+  }
+  return false;
+}
+
+/**
+ * Start a mission from the Tavern menu.
+ * Requires Tavern menu to be open (use navigateToCastleTavern first).
+ * @param buttonSelector - The mission-specific button selector (e.g., ".overtimelumberjack--mission-start--button")
+ */
+export async function startMission(
+  page: Page,
+  buttonSelector: string,
+  missionName: string,
+): Promise<boolean> {
+  try {
+    await dismissPopups(page);
+
+    const startBtn = page.locator(buttonSelector);
+
+    if (!(await startBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+      console.warn(`[startMission] Button not found: ${buttonSelector}`);
+      return false;
+    }
+
+    // Check if button is disabled
+    const isDisabled = await startBtn
+      .evaluate((el) => el.classList.contains('disabled'))
+      .catch(() => false);
+    if (isDisabled) {
+      console.log(`[startMission] Mission "${missionName}" button is disabled`);
+      return false;
+    }
+
+    if (config.dryRun) {
+      console.log(`[DRY RUN] Would start mission: ${missionName}`);
+      return true;
+    }
+
+    await startBtn.click();
+    await page.waitForTimeout(500);
+
+    // Verify page health after action
+    if (!(await verifyPostAction(page, 'startMission', buttonSelector))) {
+      return false;
+    }
+
+    console.log(`Started mission: ${missionName}`);
+    return true;
+  } catch (e) {
+    console.error(`Failed to start mission "${missionName}":`, e);
+    await saveDebugContext(page, 'mission-start-failed');
   }
   return false;
 }

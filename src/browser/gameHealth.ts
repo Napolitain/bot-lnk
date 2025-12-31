@@ -44,7 +44,7 @@ const ERROR_SELECTORS = [
 const VIEW_SELECTORS: Record<string, string> = {
   buildings: '.table--global-overview--buildings',
   recruitment: '.table--global-overview--recruitment',
-  trading: '.table--global-overview--trading',
+  keep: '.icon-building--keep', // Per-castle Keep menu
 };
 
 // ==================== Health Checkers ====================

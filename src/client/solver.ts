@@ -3,17 +3,15 @@ import { config } from '../config.js';
 import { SolverError } from '../errors/index.js';
 import type { CastleState } from '../game/castle.js';
 import {
-  type BuildingAction,
+  type Action,
   type CastleSolverServiceClient,
   CastleSolverServiceDefinition,
-  type ResearchAction,
   type SolveRequest,
   type UnitsRecommendation,
 } from '../generated/proto/config.js';
 
 export interface SolverActions {
-  nextAction?: BuildingAction;
-  nextResearchAction?: ResearchAction;
+  nextAction?: Action;
   unitsRecommendation?: UnitsRecommendation;
 }
 
@@ -49,8 +47,7 @@ export async function getNextActionsForCastle(
   try {
     const response = await client.solve(request);
     return {
-      nextAction: response.nextAction,
-      nextResearchAction: response.nextResearchAction,
+      nextAction: response.nextImmediateAction,
       unitsRecommendation: response.unitsRecommendation,
     };
   } catch (e) {
