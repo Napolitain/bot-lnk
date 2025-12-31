@@ -59,7 +59,11 @@ const DEFAULT_THRESHOLDS: MemoryThresholds = {
  */
 export function shouldRestartForMemory(
   thresholds: MemoryThresholds = DEFAULT_THRESHOLDS,
-): { shouldRestart: boolean; reason: string | null; memory: SystemMemory | null } {
+): {
+  shouldRestart: boolean;
+  reason: string | null;
+  memory: SystemMemory | null;
+} {
   const memory = getSystemMemory();
 
   if (!memory) {

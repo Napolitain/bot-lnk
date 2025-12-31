@@ -11,8 +11,8 @@ import {
 import { login } from '../browser/login.js';
 import {
   navigateToBuildingsView,
-  navigateToRecruitmentView,
   navigateToCastleKeep,
+  navigateToRecruitmentView,
 } from '../browser/navigation.js';
 import { dismissPopups } from '../browser/popups.js';
 import {
@@ -272,7 +272,11 @@ async function runBotLoopInternal(
               console.log(
                 `\nSolver recommends research: ${nextAction.research.technologyName || 'Unknown'}`,
               );
-              await researchTechnology(page, nextAction.research.technology, castleIndex);
+              await researchTechnology(
+                page,
+                nextAction.research.technology,
+                castleIndex,
+              );
             }
             break;
 

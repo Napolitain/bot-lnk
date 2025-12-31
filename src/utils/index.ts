@@ -7,8 +7,8 @@ export {
   getSystemMemory,
   logMemoryStatus,
   type MemoryThresholds,
-  shouldRestartForMemory,
   type SystemMemory,
+  shouldRestartForMemory,
 } from './memory.js';
 export {
   type PollOptions,

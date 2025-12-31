@@ -126,7 +126,9 @@ export async function escalatingRecovery<TContext>(
         };
       }
       // Action returned false (e.g., page closed) - stop trying
-      console.log(`[Recovery] ${action.name} returned false, stopping recovery chain`);
+      console.log(
+        `[Recovery] ${action.name} returned false, stopping recovery chain`,
+      );
       break;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -226,12 +228,12 @@ export async function withRecovery<TContext, T>(
     return await action();
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    
+
     // If context is closed, don't bother with recovery
     if (errorMsg.includes('closed')) {
       return defaultValue;
     }
-    
+
     console.warn(`[withRecovery] Action failed: ${errorMsg}`);
 
     const recovery = await escalatingRecovery(ctx, recoveryActions);
@@ -241,7 +243,8 @@ export async function withRecovery<TContext, T>(
       try {
         return await action();
       } catch (retryError) {
-        const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
+        const retryMsg =
+          retryError instanceof Error ? retryError.message : String(retryError);
         if (!retryMsg.includes('closed')) {
           console.warn(`[withRecovery] Retry after recovery failed`);
         }

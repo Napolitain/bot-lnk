@@ -61,9 +61,11 @@ export async function getAvailableMissions(
 
   try {
     // Find all mission rows (clickable elements with mission icon)
-    const missionRows = page.locator('.menu-list-element-basic.clickable').filter({
-      has: page.locator('.icon-mission'),
-    });
+    const missionRows = page
+      .locator('.menu-list-element-basic.clickable')
+      .filter({
+        has: page.locator('.icon-mission'),
+      });
 
     const count = await missionRows.count();
 

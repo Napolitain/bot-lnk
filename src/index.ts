@@ -1,16 +1,19 @@
-import { type BrowserContext, type Page, chromium } from 'playwright';
+import { type BrowserContext, chromium, type Page } from 'playwright';
 import { runBotLoop } from './bot/index.js';
 import { createTimeSnapshot, forceRefresh } from './browser/gameHealth.js';
 import { closeSolverClient, createSolverClient } from './client/solver.js';
 import { config, validateConfig } from './config.js';
 import {
-  type MetricsCollector,
   createMetricsCollector,
   generateSummary,
+  type MetricsCollector,
   printSummary,
 } from './metrics/index.js';
 import { checkStale, type StateSnapshot } from './resilience/index.js';
-import { createSystemdWatchdog, type SystemdWatchdog } from './systemd/watchdog.js';
+import {
+  createSystemdWatchdog,
+  type SystemdWatchdog,
+} from './systemd/watchdog.js';
 import {
   cleanupDebugDumps,
   formatError,
@@ -144,8 +147,10 @@ async function main() {
     // Check system memory before each cycle
     // Skip if we just woke from a long sleep (>5min) - browser was idle, low RAM is just OS paging
     const skipMemoryCheck = lastSleepMs > 5 * 60 * 1000;
-    const memCheck = skipMemoryCheck ? { shouldRestart: false, reason: null } : shouldRestartForMemory();
-    
+    const memCheck = skipMemoryCheck
+      ? { shouldRestart: false, reason: null }
+      : shouldRestartForMemory();
+
     if (memCheck.shouldRestart && memCheck.reason) {
       console.warn(`[Memory] ${memCheck.reason}`);
       console.log('[Memory] Restarting browser context to free memory...');

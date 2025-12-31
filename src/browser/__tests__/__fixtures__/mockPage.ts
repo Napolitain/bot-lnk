@@ -3,30 +3,30 @@ import type { Page } from 'playwright';
 export interface MockPageConfig {
   // View state
   initialView?: 'buildings' | 'library' | 'keep' | 'tavern' | 'none';
-  
+
   // Navigation success flags (new sidebar approach)
   buildingSidebarVisible?: boolean;
   libraryMenuOpensAfterClick?: boolean;
   keepMenuOpensAfterClick?: boolean;
   tavernMenuOpensAfterClick?: boolean;
-  
+
   // Legacy navigation (table-based - deprecated)
   castleRowVisible?: boolean;
   libraryBuildingVisible?: boolean;
   buildingMenuOpensAfterClick?: boolean;
-  
+
   // Building upgrade specific
   buildingButtonEnabled?: boolean;
   buildingHasDisabledClass?: boolean;
   buildingIsUpgrading?: boolean;
   confirmDialogAppears?: boolean;
-  
+
   // Technology specific
   technologyVisible?: boolean;
-  
+
   // Health check
   pageHealthy?: boolean;
-  
+
   // PollUntil behavior
   pollUntilSuccess?: boolean;
 }
@@ -48,7 +48,7 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
   const locators: string[] = [];
   const texts: string[] = [];
   const evaluateCalls: string[] = [];
-  
+
   // Default config
   const cfg = {
     initialView: config.initialView ?? 'none',
@@ -67,33 +67,36 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
     pageHealthy: config.pageHealthy ?? true,
     pollUntilSuccess: config.pollUntilSuccess ?? true,
   };
-  
+
   let libraryMenuOpen = cfg.initialView === 'library';
   let keepMenuOpen = cfg.initialView === 'keep';
   let tavernMenuOpen = cfg.initialView === 'tavern';
   let buildingMenuOpen = false;
-  
-  function createLocatorMock(selector: string, options: {
-    visible?: boolean;
-    enabled?: boolean;
-    textContent?: string;
-    count?: number;
-  } = {}): any {
+
+  function createLocatorMock(
+    selector: string,
+    options: {
+      visible?: boolean;
+      enabled?: boolean;
+      textContent?: string;
+      count?: number;
+    } = {},
+  ): any {
     locators.push(selector);
-    
+
     const mock = {
       locator: (subSelector: string) => {
         return createLocatorMock(subSelector, options);
       },
-      
-      getByText: (text: string, opts: { exact?: boolean } = {}) => {
+
+      getByText: (text: string, _opts: { exact?: boolean } = {}) => {
         texts.push(text);
         // Create a combined selector showing the chain
         const combined = `${selector} > text="${text}"`;
         const textMock = createLocatorMock(combined, options);
-        
+
         // Override click to handle state changes
-        const originalClick = textMock.click;
+        const _originalClick = textMock.click;
         textMock.click = async () => {
           clicks.push(combined);
           if (text === 'Library' && cfg.libraryMenuOpensAfterClick) {
@@ -106,39 +109,50 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
             tavernMenuOpen = true;
           }
         };
-        
+
         return textMock;
       },
-      
-      nth: (index: number) => createLocatorMock(`${selector}[${index}]`, options),
-      
+
+      nth: (index: number) =>
+        createLocatorMock(`${selector}[${index}]`, options),
+
       first: () => createLocatorMock(`${selector}.first()`, options),
-      
+
       filter: ({ has, hasText }: any) => {
         const filterDesc = has ? ` with child` : `filter(hasText:${hasText})`;
         // For library row, this is filtering by icon-building--library child
         const filtered = createLocatorMock(`${selector}${filterDesc}`, {
           ...options,
-          visible: has && selector.includes('.menu-list-element-basic') 
-            ? (cfg.libraryBuildingVisible && buildingMenuOpen)
-            : options.visible,
+          visible:
+            has && selector.includes('.menu-list-element-basic')
+              ? cfg.libraryBuildingVisible && buildingMenuOpen
+              : options.visible,
         });
         return filtered;
       },
-      
+
       click: async () => {
         clicks.push(selector);
-        
+
         // Simulate state changes after clicks
-        if (selector.includes('.tabular-cell--upgrade-building') && !buildingMenuOpen) {
+        if (
+          selector.includes('.tabular-cell--upgrade-building') &&
+          !buildingMenuOpen
+        ) {
           // Clicking castle row opens building menu (legacy path)
           buildingMenuOpen = cfg.buildingMenuOpensAfterClick;
         }
-        if (selector.includes('text="Buildings"') || selector.includes('Buildings')) {
+        if (
+          selector.includes('text="Buildings"') ||
+          selector.includes('Buildings')
+        ) {
           // Clicking Buildings button (always successful)
           // No state change needed - sidebar is always available
         }
-        if (selector.includes('text="Library"') || selector.includes('Library')) {
+        if (
+          selector.includes('text="Library"') ||
+          selector.includes('Library')
+        ) {
           // Clicking Library in sidebar
           if (cfg.libraryMenuOpensAfterClick) {
             libraryMenuOpen = true;
@@ -163,7 +177,7 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
           }
         }
       },
-      
+
       isVisible: async ({ timeout }: { timeout?: number } = {}) => {
         // Determine visibility based on selector patterns
         if (selector.includes('.table--global-overview--buildings')) {
@@ -172,19 +186,34 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
         if (selector.includes('#menu-section-general-container')) {
           return cfg.buildingSidebarVisible;
         }
-        if (selector.includes('text="Buildings"') || (selector.includes('Buildings') && !selector.includes('table'))) {
+        if (
+          selector.includes('text="Buildings"') ||
+          (selector.includes('Buildings') && !selector.includes('table'))
+        ) {
           return true; // Buildings button always visible
         }
-        if (selector.includes('text="Library"') && selector.includes('#menu-section-general-container')) {
+        if (
+          selector.includes('text="Library"') &&
+          selector.includes('#menu-section-general-container')
+        ) {
           return cfg.buildingSidebarVisible;
         }
-        if (selector.includes('text="Keep"') && selector.includes('#menu-section-general-container')) {
+        if (
+          selector.includes('text="Keep"') &&
+          selector.includes('#menu-section-general-container')
+        ) {
           return cfg.buildingSidebarVisible;
         }
-        if (selector.includes('text="Tavern"') && selector.includes('#menu-section-general-container')) {
+        if (
+          selector.includes('text="Tavern"') &&
+          selector.includes('#menu-section-general-container')
+        ) {
           return cfg.buildingSidebarVisible;
         }
-        if (selector.includes('.menu-list-title-basic') || selector.includes('.menu-list-element-basic')) {
+        if (
+          selector.includes('.menu-list-title-basic') ||
+          selector.includes('.menu-list-element-basic')
+        ) {
           return libraryMenuOpen || keepMenuOpen || tavernMenuOpen;
         }
         if (selector.includes('.icon-building--keep')) {
@@ -196,7 +225,10 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
         if (selector.includes('.icon-building--library')) {
           return cfg.libraryBuildingVisible && buildingMenuOpen;
         }
-        if (selector.includes('.menu-list-element-basic.clickable') && selector.includes('filter')) {
+        if (
+          selector.includes('.menu-list-element-basic.clickable') &&
+          selector.includes('filter')
+        ) {
           // This is the library row filter - should be visible if building menu is open
           return cfg.libraryBuildingVisible && buildingMenuOpen;
         }
@@ -213,21 +245,21 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
         if (selector.includes('button.button--in-building-list--trade')) {
           return keepMenuOpen;
         }
-        
+
         return options.visible ?? true;
       },
-      
+
       isEnabled: async () => {
         if (selector.includes('button')) {
           return cfg.buildingButtonEnabled;
         }
         return options.enabled ?? true;
       },
-      
+
       textContent: async () => {
         return options.textContent ?? '100';
       },
-      
+
       count: async () => {
         if (selector.includes('.upgrade-building--cell')) {
           // Multiple cells means upgrading
@@ -238,43 +270,43 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
         }
         return options.count ?? 1;
       },
-      
-      evaluate: async (fn: any) => {
+
+      evaluate: async (_fn: any) => {
         evaluateCalls.push(selector);
-        
+
         // Mock classList.contains('disabled')
         if (selector.includes('button')) {
           return cfg.buildingHasDisabledClass;
         }
-        
+
         return false;
       },
-      
-      waitForTimeout: async (ms: number) => {
+
+      waitForTimeout: async (_ms: number) => {
         // No-op in tests
       },
-      
-      catch: (handler: any) => mock,
+
+      catch: (_handler: any) => mock,
     };
-    
+
     return mock;
   }
-  
+
   const page = {
     locator: (selector: string) => createLocatorMock(selector),
-    
+
     getByRole: (role: string, { name }: { name: string }) => {
       return createLocatorMock(`role=${role}[name="${name}"]`);
     },
-    
+
     getByText: (text: string, { exact }: { exact?: boolean } = {}) => {
       texts.push(text); // Track getByText calls
-      
+
       // Return a locator mock that knows about the text
       const textLocator = createLocatorMock(`text="${text}"`);
-      
+
       // Override click to handle text-based navigation
-      const originalClick = textLocator.click;
+      const _originalClick = textLocator.click;
       textLocator.click = async () => {
         clicks.push(`text="${text}"`);
         if (text === 'Library' && cfg.libraryMenuOpensAfterClick) {
@@ -287,16 +319,16 @@ export function createMockPage(config: MockPageConfig = {}): MockPageResult {
           tavernMenuOpen = true;
         }
       };
-      
+
       return textLocator;
     },
-    
-    waitForTimeout: async (ms: number) => {
+
+    waitForTimeout: async (_ms: number) => {
       // No-op
     },
-    
+
     url: () => 'https://lordsandknights.com/game',
   } as unknown as Page;
-  
+
   return { page, clicks, locators, texts, evaluateCalls };
 }

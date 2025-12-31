@@ -13,17 +13,17 @@ export interface SystemdWatchdog {
 
 /**
  * Create a systemd watchdog notifier.
- * 
+ *
  * Auto-detects systemd environment via WATCHDOG_USEC env var.
  * When not running under systemd, all methods become no-ops.
- * 
+ *
  * Usage:
  *   const watchdog = createSystemdWatchdog();
  *   watchdog.start();  // Starts periodic pings if systemd detected
- *   
+ *
  *   // In your main loop:
  *   await watchdog.notify();  // Send "I'm alive" ping
- *   
+ *
  *   // On shutdown:
  *   watchdog.stop();
  */

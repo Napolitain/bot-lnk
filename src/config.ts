@@ -113,7 +113,10 @@ function loadBlocklist(): BlocklistConfig {
       allowPatterns: loaded.allowPatterns ?? defaultBlocklist.allowPatterns,
     };
   } catch (error) {
-    console.warn(`[Config] Failed to load blocklist from ${blocklistFile}:`, error);
+    console.warn(
+      `[Config] Failed to load blocklist from ${blocklistFile}:`,
+      error,
+    );
     return defaultBlocklist;
   }
 }

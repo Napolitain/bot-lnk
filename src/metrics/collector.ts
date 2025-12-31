@@ -367,32 +367,48 @@ export class MetricsCollector {
     const totalHeapMB = snapshot.memory.totalJSHeapSize / (1024 * 1024);
     const transferMB = snapshot.network.totalTransferSize / (1024 * 1024);
 
-    console.log(`\n[Metrics] ═══ ${snapshot.label} (${snapshot.duration}ms) ═══`);
-    
+    console.log(
+      `\n[Metrics] ═══ ${snapshot.label} (${snapshot.duration}ms) ═══`,
+    );
+
     // Memory details
     console.log(`  Memory:`);
-    console.log(`    JS Heap: ${memoryMB.toFixed(2)} MB used / ${totalHeapMB.toFixed(2)} MB total`);
-    console.log(`    DOM: ${snapshot.memory.nodes} nodes, ${snapshot.memory.documents} documents, ${snapshot.memory.jsEventListeners} listeners`);
-    
+    console.log(
+      `    JS Heap: ${memoryMB.toFixed(2)} MB used / ${totalHeapMB.toFixed(2)} MB total`,
+    );
+    console.log(
+      `    DOM: ${snapshot.memory.nodes} nodes, ${snapshot.memory.documents} documents, ${snapshot.memory.jsEventListeners} listeners`,
+    );
+
     // CPU details
     console.log(`  CPU:`);
-    console.log(`    Script: ${snapshot.performance.scriptDuration.toFixed(2)}ms, Layout: ${snapshot.performance.layoutDuration.toFixed(2)}ms`);
-    console.log(`    Task: ${snapshot.performance.taskDuration.toFixed(2)}ms, Style recalc: ${snapshot.performance.recalcStyleDuration.toFixed(2)}ms`);
-    console.log(`    Layout count: ${snapshot.performance.layoutCount}, Style recalc count: ${snapshot.performance.recalcStyleCount}`);
-    
+    console.log(
+      `    Script: ${snapshot.performance.scriptDuration.toFixed(2)}ms, Layout: ${snapshot.performance.layoutDuration.toFixed(2)}ms`,
+    );
+    console.log(
+      `    Task: ${snapshot.performance.taskDuration.toFixed(2)}ms, Style recalc: ${snapshot.performance.recalcStyleDuration.toFixed(2)}ms`,
+    );
+    console.log(
+      `    Layout count: ${snapshot.performance.layoutCount}, Style recalc count: ${snapshot.performance.recalcStyleCount}`,
+    );
+
     // Network summary
-    console.log(`  Network: ${snapshot.network.totalRequests} requests, ${transferMB.toFixed(2)} MB transfer`);
+    console.log(
+      `  Network: ${snapshot.network.totalRequests} requests, ${transferMB.toFixed(2)} MB transfer`,
+    );
 
     // All resource types by transfer size
-    const allTypes = Array.from(snapshot.network.transferByType.entries())
-      .sort((a, b) => b[1] - a[1]);
+    const allTypes = Array.from(snapshot.network.transferByType.entries()).sort(
+      (a, b) => b[1] - a[1],
+    );
     if (allTypes.length > 0) {
       console.log('  By type:');
       for (const [type, size] of allTypes) {
         const count = snapshot.network.requestsByType.get(type) || 0;
         const sizeMB = size / (1024 * 1024);
         const sizeKB = size / 1024;
-        const sizeStr = sizeMB >= 0.1 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(1)} KB`;
+        const sizeStr =
+          sizeMB >= 0.1 ? `${sizeMB.toFixed(2)} MB` : `${sizeKB.toFixed(1)} KB`;
         console.log(`    ${type}: ${count} req, ${sizeStr}`);
       }
     }

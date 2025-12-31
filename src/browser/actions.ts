@@ -263,7 +263,7 @@ export async function researchTechnology(
     const techRow = page.locator('.menu-list-element-basic').filter({
       hasText: techName,
     });
-    
+
     if (!(await techRow.isVisible({ timeout: 3000 }).catch(() => false))) {
       console.log(
         `Technology ${techName} not visible (may already be researched or not available)`,
@@ -279,9 +279,13 @@ export async function researchTechnology(
     }
 
     // Check if button is disabled
-    const isDisabled = await researchBtn.evaluate(el => el.classList.contains('disabled'));
+    const isDisabled = await researchBtn.evaluate((el) =>
+      el.classList.contains('disabled'),
+    );
     if (isDisabled) {
-      console.log(`Research button disabled for ${techName} (insufficient resources or already researching)`);
+      console.log(
+        `Research button disabled for ${techName} (insufficient resources or already researching)`,
+      );
       return false;
     }
 

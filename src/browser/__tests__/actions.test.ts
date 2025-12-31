@@ -105,9 +105,9 @@ describe('upgradeBuilding', () => {
     expect(
       locators.some((s) => s.includes('.table--global-overview--buildings')),
     ).toBe(true);
-    expect(locators.some((s) => s.includes('.tabular-cell--upgrade-building'))).toBe(
-      true,
-    );
+    expect(
+      locators.some((s) => s.includes('.tabular-cell--upgrade-building')),
+    ).toBe(true);
   });
 
   it('handles different castle indices correctly', async () => {
@@ -127,7 +127,11 @@ describe('upgradeBuilding', () => {
     });
 
     // Use BUILDING_UNKNOWN
-    const result = await upgradeBuilding(page, 0, BuildingType.BUILDING_UNKNOWN);
+    const result = await upgradeBuilding(
+      page,
+      0,
+      BuildingType.BUILDING_UNKNOWN,
+    );
 
     expect(result).toBe(false);
     expect(clicks).toHaveLength(0);

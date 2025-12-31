@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { navigateToCastleLibrary, navigateToCastleKeep, navigateToCastleTavern } from '../navigation.js';
+import {
+  navigateToCastleKeep,
+  navigateToCastleLibrary,
+  navigateToCastleTavern,
+} from '../navigation.js';
 import { createMockPage } from './__fixtures__/mockPage.js';
 
 // Mock dependencies
@@ -8,13 +12,13 @@ vi.mock('../popups.js', () => ({
 }));
 
 vi.mock('../../utils/index.js', () => ({
-  pollUntil: vi.fn(async (fn, options) => {
+  pollUntil: vi.fn(async (fn, _options) => {
     // Simulate polling by calling the function multiple times
     // This allows state changes from clicks to take effect
     let result = await fn();
     if (!result) {
       // Try again (simulating one retry)
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
       result = await fn();
     }
     return result;
@@ -24,12 +28,12 @@ vi.mock('../../utils/index.js', () => ({
 
 /**
  * CRITICAL NAVIGATION BEHAVIOR:
- * 
+ *
  * All per-castle building menus (Library, Keep, Tavern) MUST use the same path:
  * 1. Click "Buildings" button (top menu)
  * 2. Click building name in #menu-section-general-container sidebar
  * 3. Wait for building-specific menu to open
- * 
+ *
  * This is simpler and more reliable than the table-based approach.
  * These tests ensure we maintain this behavior.
  */
@@ -64,10 +68,10 @@ describe('navigateToCastleLibrary', () => {
 
     // CRITICAL: Must use Buildings button, not global table
     expect(texts).toContain('Buildings');
-    
+
     // CRITICAL: Must use sidebar container
     expect(texts).toContain('Library');
-    
+
     // Should have 2 clicks: Buildings button + Library button
     expect(clicks.length).toBeGreaterThanOrEqual(2);
   });
@@ -108,7 +112,9 @@ describe('navigateToCastleLibrary', () => {
     // CRITICAL: Must use these exact patterns (Playwright recording verified)
     expect(texts).toContain('Buildings'); // Top menu button
     expect(texts).toContain('Library'); // Sidebar button
-    expect(locators.some(s => s.includes('#menu-section-general-container'))).toBe(true);
+    expect(
+      locators.some((s) => s.includes('#menu-section-general-container')),
+    ).toBe(true);
   });
 
   it('CRITICAL: does NOT use global table path (regression)', async () => {
@@ -121,12 +127,20 @@ describe('navigateToCastleLibrary', () => {
     await navigateToCastleLibrary(page, 0);
 
     // MUST NOT use old table-based selectors
-    expect(locators.some(s => s.includes('.table--global-overview--buildings'))).toBe(false);
-    expect(locators.some(s => s.includes('.tabular-cell--upgrade-building'))).toBe(false);
-    expect(locators.some(s => s.includes('.icon-building--library'))).toBe(false);
-    
+    expect(
+      locators.some((s) => s.includes('.table--global-overview--buildings')),
+    ).toBe(false);
+    expect(
+      locators.some((s) => s.includes('.tabular-cell--upgrade-building')),
+    ).toBe(false);
+    expect(locators.some((s) => s.includes('.icon-building--library'))).toBe(
+      false,
+    );
+
     // MUST use new sidebar-based approach
-    expect(locators.some(s => s.includes('#menu-section-general-container'))).toBe(true);
+    expect(
+      locators.some((s) => s.includes('#menu-section-general-container')),
+    ).toBe(true);
   });
 });
 
@@ -149,7 +163,9 @@ describe('navigateToCastleKeep', () => {
     // CRITICAL: Must match Library navigation pattern
     expect(texts).toContain('Buildings');
     expect(texts).toContain('Keep');
-    expect(locators.some(s => s.includes('#menu-section-general-container'))).toBe(true);
+    expect(
+      locators.some((s) => s.includes('#menu-section-general-container')),
+    ).toBe(true);
   });
 
   it('CRITICAL: does NOT use global table path (regression)', async () => {
@@ -162,8 +178,12 @@ describe('navigateToCastleKeep', () => {
     await navigateToCastleKeep(page, 0);
 
     // MUST NOT use old table-based approach
-    expect(locators.some(s => s.includes('.table--global-overview--buildings'))).toBe(false);
-    expect(locators.some(s => s.includes('.icon-building--keep'))).toBe(false);
+    expect(
+      locators.some((s) => s.includes('.table--global-overview--buildings')),
+    ).toBe(false);
+    expect(locators.some((s) => s.includes('.icon-building--keep'))).toBe(
+      false,
+    );
   });
 });
 
@@ -186,7 +206,9 @@ describe('navigateToCastleTavern', () => {
     // CRITICAL: Must match Library navigation pattern
     expect(texts).toContain('Buildings');
     expect(texts).toContain('Tavern');
-    expect(locators.some(s => s.includes('#menu-section-general-container'))).toBe(true);
+    expect(
+      locators.some((s) => s.includes('#menu-section-general-container')),
+    ).toBe(true);
   });
 
   it('CRITICAL: does NOT use global table path (regression)', async () => {
@@ -199,17 +221,33 @@ describe('navigateToCastleTavern', () => {
     await navigateToCastleTavern(page, 0);
 
     // MUST NOT use old table-based approach
-    expect(locators.some(s => s.includes('.table--global-overview--buildings'))).toBe(false);
-    expect(locators.some(s => s.includes('.icon-building--tavern'))).toBe(false);
+    expect(
+      locators.some((s) => s.includes('.table--global-overview--buildings')),
+    ).toBe(false);
+    expect(locators.some((s) => s.includes('.icon-building--tavern'))).toBe(
+      false,
+    );
   });
 });
 
 describe('CRITICAL: All per-castle buildings use consistent navigation', () => {
   it('Library, Keep, and Tavern all use Buildings button approach', async () => {
     const configs = [
-      { name: 'Library', fn: navigateToCastleLibrary, opens: 'libraryMenuOpensAfterClick' },
-      { name: 'Keep', fn: navigateToCastleKeep, opens: 'keepMenuOpensAfterClick' },
-      { name: 'Tavern', fn: navigateToCastleTavern, opens: 'tavernMenuOpensAfterClick' },
+      {
+        name: 'Library',
+        fn: navigateToCastleLibrary,
+        opens: 'libraryMenuOpensAfterClick',
+      },
+      {
+        name: 'Keep',
+        fn: navigateToCastleKeep,
+        opens: 'keepMenuOpensAfterClick',
+      },
+      {
+        name: 'Tavern',
+        fn: navigateToCastleTavern,
+        opens: 'tavernMenuOpensAfterClick',
+      },
     ];
 
     for (const { name, fn, opens } of configs) {
@@ -222,17 +260,19 @@ describe('CRITICAL: All per-castle buildings use consistent navigation', () => {
       await fn(page, 0);
 
       // All must use same pattern
-      expect(texts, `${name} should use Buildings button`).toContain('Buildings');
+      expect(texts, `${name} should use Buildings button`).toContain(
+        'Buildings',
+      );
       expect(texts, `${name} should use sidebar button`).toContain(name);
       expect(
-        locators.some(s => s.includes('#menu-section-general-container')),
-        `${name} should use sidebar container`
+        locators.some((s) => s.includes('#menu-section-general-container')),
+        `${name} should use sidebar container`,
       ).toBe(true);
-      
+
       // None should use old table approach
       expect(
-        locators.some(s => s.includes('.table--global-overview--buildings')),
-        `${name} should NOT use global table`
+        locators.some((s) => s.includes('.table--global-overview--buildings')),
+        `${name} should NOT use global table`,
       ).toBe(false);
     }
   });

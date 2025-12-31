@@ -23,7 +23,7 @@ async function isOnRecruitmentView(page: Page): Promise<boolean> {
 }
 
 /** Check if castle building menu is open (per-castle view with Keep, Arsenal, etc.) */
-async function isCastleBuildingMenuOpen(page: Page): Promise<boolean> {
+async function _isCastleBuildingMenuOpen(page: Page): Promise<boolean> {
   try {
     const keepIcon = page.locator('.icon-building--keep');
     return await keepIcon.isVisible({ timeout: 500 });
@@ -103,7 +103,7 @@ export async function navigateToRecruitmentView(page: Page): Promise<boolean> {
  */
 export async function navigateToCastleKeep(
   page: Page,
-  castleIndex: number,
+  _castleIndex: number,
 ): Promise<boolean> {
   await dismissPopups(page);
 
@@ -121,7 +121,9 @@ export async function navigateToCastleKeep(
   }
 
   // Click "Keep" in the per-castle buildings sidebar
-  const keepBtn = page.locator('#menu-section-general-container').getByText('Keep');
+  const keepBtn = page
+    .locator('#menu-section-general-container')
+    .getByText('Keep');
   if (!(await keepBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
     console.warn('[navigateToCastleKeep] Keep button not found in sidebar');
     return false;
@@ -166,7 +168,7 @@ async function isTavernMenuOpen(page: Page): Promise<boolean> {
  */
 export async function navigateToCastleTavern(
   page: Page,
-  castleIndex: number,
+  _castleIndex: number,
 ): Promise<boolean> {
   await dismissPopups(page);
 
@@ -184,7 +186,9 @@ export async function navigateToCastleTavern(
   }
 
   // Click "Tavern" in the per-castle buildings sidebar
-  const tavernBtn = page.locator('#menu-section-general-container').getByText('Tavern');
+  const tavernBtn = page
+    .locator('#menu-section-general-container')
+    .getByText('Tavern');
   if (!(await tavernBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
     console.warn('[navigateToCastleTavern] Tavern button not found in sidebar');
     return false;
@@ -215,7 +219,9 @@ export async function navigateToCastleTavern(
 async function isLibraryMenuOpen(page: Page): Promise<boolean> {
   try {
     // Look for any technology name to confirm Library menu is open
-    const techSection = page.locator('.menu-list-title-basic, .menu-list-element-basic');
+    const techSection = page.locator(
+      '.menu-list-title-basic, .menu-list-element-basic',
+    );
     return await techSection.first().isVisible({ timeout: 500 });
   } catch {
     return false;
@@ -228,7 +234,7 @@ async function isLibraryMenuOpen(page: Page): Promise<boolean> {
  */
 export async function navigateToCastleLibrary(
   page: Page,
-  castleIndex: number,
+  _castleIndex: number,
 ): Promise<boolean> {
   await dismissPopups(page);
 
@@ -246,9 +252,13 @@ export async function navigateToCastleLibrary(
   }
 
   // Click "Library" in the global buildings sidebar
-  const libraryBtn = page.locator('#menu-section-general-container').getByText('Library');
+  const libraryBtn = page
+    .locator('#menu-section-general-container')
+    .getByText('Library');
   if (!(await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
-    console.warn('[navigateToCastleLibrary] Library button not found in sidebar');
+    console.warn(
+      '[navigateToCastleLibrary] Library button not found in sidebar',
+    );
     return false;
   }
 
