@@ -22,6 +22,7 @@ import {
 import { config } from '../config.js';
 import { determineCastlePhase } from '../domain/index.js';
 import { type CastleState, getCastles } from '../game/castle.js';
+import { getResearchedTechnologies } from '../game/technologies.js';
 import { getUnits } from '../game/units.js';
 import {
   ActionType,
@@ -217,6 +218,24 @@ async function runBotLoopInternal(
   console.log('\n=== Castle Status ===');
   for (const castle of castles) {
     printCastleStatus(castle);
+  }
+
+  // Read researched technologies for first castle (library is shared)
+  // This ensures solver knows what's already researched
+  if (castles.length > 0) {
+    try {
+      console.log('\n[Loop] Reading researched technologies...');
+      const researchedTechs = await getResearchedTechnologies(page, 0);
+      // Apply to all castles (library is shared across castles)
+      for (const castle of castles) {
+        castle.config.researchedTechnologies = researchedTechs;
+      }
+      console.log(`[Loop] Found ${researchedTechs.length} researched technologies`);
+      // Navigate back to buildings view after reading library
+      await navigateToBuildingsView(page);
+    } catch (e) {
+      console.warn('[Loop] Failed to read researched technologies:', e);
+    }
   }
 
   // Click any free finish buttons (non-critical)
