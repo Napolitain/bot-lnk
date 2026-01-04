@@ -350,8 +350,10 @@ async function runBotLoopInternal(
       // Log build order status
       if (unitsRecommendation) {
         console.log(
-          `[Solve] ${castle.name}: Build order ${unitsRecommendation.buildOrderComplete ? 'COMPLETE' : 'in progress'}`,
+          `[Solve] ${castle.name}: Build order ${unitsRecommendation.buildOrderComplete ? 'COMPLETE ✅' : 'IN PROGRESS 🔨'}`,
         );
+      } else {
+        console.log(`[Solve] ${castle.name}: No units recommendation from solver`);
       }
     } catch (error) {
       console.warn(`[Solve] ${castle.name}: Failed to get solver actions, skipping`);
