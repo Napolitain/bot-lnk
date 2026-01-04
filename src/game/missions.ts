@@ -1,4 +1,5 @@
 import type { Page } from 'playwright';
+import { config } from '../config.js';
 import { dismissPopups } from '../browser/popups.js';
 
 /** Mission types based on icon class patterns */
@@ -161,8 +162,13 @@ export async function getAvailableMissions(
 
       if (buttonExists) {
         // Check if this is a speedup button (mission already running)
-        // The speedup icon is in a child div, not in the button class
-        const hasSpeedupIcon = await startBtn.locator('.icon-mission-speedup').count() > 0;
+        // The speedup icon is in a child div: <div class="icon ... icon-mission-speedup"></div>
+        const buttonHtml = await startBtn.innerHTML().catch(() => '');
+        const hasSpeedupIcon = buttonHtml.includes('icon-mission-speedup');
+        
+        if (config.debug) {
+          console.log(`[getMissions] Mission "${name}": hasSpeedupIcon=${hasSpeedupIcon}`);
+        }
         
         if (hasSpeedupIcon) {
           state = 'running';
