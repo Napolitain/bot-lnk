@@ -274,7 +274,9 @@ export async function researchTechnology(
     // Click the button within the technology row
     const researchBtn = techRow.locator('button.button');
     if (!(await researchBtn.isVisible({ timeout: 1000 }).catch(() => false))) {
-      console.log(`Technology ${techName} has no research button (likely already researched)`);
+      console.log(
+        `Technology ${techName} has no research button (likely already researched)`,
+      );
       return false;
     }
 

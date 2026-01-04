@@ -230,7 +230,9 @@ async function runBotLoopInternal(
       for (const castle of castles) {
         castle.config.researchedTechnologies = researchedTechs;
       }
-      console.log(`[Loop] Found ${researchedTechs.length} researched technologies`);
+      console.log(
+        `[Loop] Found ${researchedTechs.length} researched technologies`,
+      );
       // Navigate back to buildings view after reading library
       await navigateToBuildingsView(page);
     } catch (e) {
