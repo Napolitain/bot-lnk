@@ -89,6 +89,21 @@ export async function handleMissionPhase(
     }
   }
 
+  // Re-read missions to get timers for newly started missions
+  if (missionsStarted > 0) {
+    console.log(`[${castleName}] Re-reading mission timers...`);
+    const updatedMissions = await getAvailableMissions(page);
+    const nowRunningMissions = updatedMissions.filter((m) => m.state === 'running');
+    
+    for (const mission of nowRunningMissions) {
+      if (mission.timeRemainingMs !== undefined) {
+        if (minTimeRemainingMs === null || mission.timeRemainingMs < minTimeRemainingMs) {
+          minTimeRemainingMs = mission.timeRemainingMs;
+        }
+      }
+    }
+  }
+
   if (missionsStarted > 0) {
     console.log(
       `[${castleName}] ✅ Successfully started ${missionsStarted}/${readyMissions.length} missions`,
