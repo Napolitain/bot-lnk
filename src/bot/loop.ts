@@ -44,6 +44,7 @@ import {
 } from './display.js';
 import {
   handleBuildingPhase,
+  handleMissionPhase,
   handleRecruitingPhase,
   handleTradingPhase,
 } from './phases/index.js';
@@ -251,6 +252,7 @@ async function runBotLoopInternal(
   let totalUpgrades = 0;
   let totalRecruits = 0;
   let totalTrades = 0;
+  let totalMissions = 0;
   let minTimeRemainingMs: number | null = null;
 
   // Castles that completed building and need further phases
@@ -460,6 +462,28 @@ async function runBotLoopInternal(
 
         // End trading phase
         await metricsCollector?.endPeriod();
+
+        // ==================== PHASE 4: MISSIONS (castles with complete units) ====================
+        // After trading, run missions to generate resources continuously
+        metricsCollector?.startPeriod('missions_phase');
+
+        for (const { castle, castleIndex } of castlesForTrading) {
+          try {
+            const result = await handleMissionPhase(
+              page,
+              castle.name,
+              castleIndex,
+            );
+            totalMissions += result.missionsStarted;
+          } catch (error) {
+            console.warn(
+              `[${castle.name}] Mission phase failed:`,
+              error,
+            );
+          }
+        }
+
+        await metricsCollector?.endPeriod();
       } else {
         // No trading needed, end recruitment phase
         await metricsCollector?.endPeriod();
@@ -471,7 +495,7 @@ async function runBotLoopInternal(
   }
 
   // Summary
-  printCycleSummary(totalUpgrades, totalRecruits, totalTrades);
+  printCycleSummary(totalUpgrades, totalRecruits, totalTrades, totalMissions);
 
   // Calculate sleep time
   if (minTimeRemainingMs !== null) {

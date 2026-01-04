@@ -87,11 +87,13 @@ export function printCycleSummary(
   upgrades: number,
   recruits: number,
   trades: number,
+  missions: number,
 ): void {
   console.log(`\n=== Cycle Summary ===`);
   console.log(`  Building upgrades: ${upgrades}`);
   console.log(`  Unit recruitments: ${recruits}`);
   console.log(`  Trades executed: ${trades}`);
+  console.log(`  Missions started: ${missions}`);
 }
 
 /** Print sleep info */
