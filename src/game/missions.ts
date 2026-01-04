@@ -162,13 +162,9 @@ export async function getAvailableMissions(
 
       if (buttonExists) {
         // Check if this is a speedup button (mission already running)
-        // The speedup icon is in a child div: <div class="icon ... icon-mission-speedup"></div>
-        const buttonHtml = await startBtn.innerHTML().catch(() => '');
-        const hasSpeedupIcon = buttonHtml.includes('icon-mission-speedup');
-        
-        if (config.debug) {
-          console.log(`[getMissions] Mission "${name}": hasSpeedupIcon=${hasSpeedupIcon}`);
-        }
+        // The speedup icon is in a child div with multiple classes
+        const speedupIcon = startBtn.locator('.icon-game.icon-mission-speedup');
+        const hasSpeedupIcon = (await speedupIcon.count()) > 0;
         
         if (hasSpeedupIcon) {
           state = 'running';
