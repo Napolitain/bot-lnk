@@ -160,11 +160,11 @@ export async function getAvailableMissions(
       let timeRemainingMs: number | undefined;
 
       if (buttonExists) {
-        // Build selector from button class
-        const btnClass = (await startBtn.getAttribute('class')) || '';
-        
         // Check if this is a speedup button (mission already running)
-        if (btnClass.includes('icon-mission-speedup')) {
+        // The speedup icon is in a child div, not in the button class
+        const hasSpeedupIcon = await startBtn.locator('.icon-mission-speedup').count() > 0;
+        
+        if (hasSpeedupIcon) {
           state = 'running';
           
           // Parse timer if present
@@ -191,6 +191,7 @@ export async function getAvailableMissions(
         }
         
         // Extract the mission-specific class (e.g., "mandatoryovertime--mission-start--button")
+        const btnClass = (await startBtn.getAttribute('class')) || '';
         const missionBtnMatch = btnClass.match(/(\w+--mission-start--button)/);
         if (missionBtnMatch) {
           buttonSelector = `.${missionBtnMatch[1]}`;
