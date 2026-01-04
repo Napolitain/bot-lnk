@@ -4,14 +4,21 @@ import { dismissPopups } from '../browser/popups.js';
 /** Mission types based on icon class patterns */
 export enum MissionType {
   UNKNOWN = 'unknown',
+  MANDATORY_OVERTIME = 'MandatoryOvertime',
+  FORGING_TOOLS = 'ForgingTools',
+  MARKET_DAY = 'MarketDay',
+  FEED_MINERS = 'FeedMiners',
   OVERTIME_LUMBERJACK = 'OvertimeLumberjack',
   OVERTIME_QUARRY = 'OvertimeQuarry',
   OVERTIME_ORE_MINE = 'OvertimeOremine',
-  // Add more as discovered
 }
 
 /** Map icon class to mission type */
 const ICON_CLASS_TO_MISSION: Record<string, MissionType> = {
+  MandatoryOvertime: MissionType.MANDATORY_OVERTIME,
+  ForgingTools: MissionType.FORGING_TOOLS,
+  MarketDay: MissionType.MARKET_DAY,
+  FeedMiners: MissionType.FEED_MINERS,
   OvertimeLumberjack: MissionType.OVERTIME_LUMBERJACK,
   OvertimeQuarry: MissionType.OVERTIME_QUARRY,
   OvertimeOremine: MissionType.OVERTIME_ORE_MINE,
@@ -20,6 +27,10 @@ const ICON_CLASS_TO_MISSION: Record<string, MissionType> = {
 /** Map mission type to display name */
 export const MISSION_TYPE_TO_NAME: Record<MissionType, string> = {
   [MissionType.UNKNOWN]: 'Unknown',
+  [MissionType.MANDATORY_OVERTIME]: 'Mandatory overtime',
+  [MissionType.FORGING_TOOLS]: 'Forging tools',
+  [MissionType.MARKET_DAY]: 'Market day',
+  [MissionType.FEED_MINERS]: 'Feed miners',
   [MissionType.OVERTIME_LUMBERJACK]: 'Overtime wood',
   [MissionType.OVERTIME_QUARRY]: 'Overtime stone',
   [MissionType.OVERTIME_ORE_MINE]: 'Overtime ore',
@@ -61,6 +72,7 @@ export async function getAvailableMissions(
 
   try {
     // Find all mission rows (clickable elements with mission icon)
+    // Note: This will include the "Switch to group selection" row which we filter out below
     const missionRows = page
       .locator('.menu-list-element-basic.clickable')
       .filter({
@@ -68,15 +80,26 @@ export async function getAvailableMissions(
       });
 
     const count = await missionRows.count();
+    console.log(`[getMissions] Found ${count} potential mission rows`);
 
     for (let i = 0; i < count; i++) {
       const row = missionRows.nth(i);
+
+      // Get mission name first to filter out non-missions
+      const nameElement = row.locator('.menu-list-element-basic--title');
+      const name = (await nameElement.textContent())?.trim() || 'Unknown';
+
+      // Skip non-mission rows (like "Switch to group selection")
+      if (name === 'Switch to group selection') {
+        console.log(`[getMissions] Skipping non-mission row: ${name}`);
+        continue;
+      }
 
       // Get mission type from icon class
       const iconElement = row.locator('.icon-mission').first();
       const iconClass = (await iconElement.getAttribute('class')) || '';
 
-      // Extract mission type from class (e.g., "icon icon-left icon-mission OvertimeLumberjack")
+      // Extract mission type from class (e.g., "icon icon-left icon-mission MandatoryOvertime")
       let missionType = MissionType.UNKNOWN;
       for (const [iconPattern, type] of Object.entries(ICON_CLASS_TO_MISSION)) {
         if (iconClass.includes(iconPattern)) {
@@ -84,10 +107,6 @@ export async function getAvailableMissions(
           break;
         }
       }
-
-      // Get mission name
-      const nameElement = row.locator('.menu-list-element-basic--title');
-      const name = (await nameElement.textContent())?.trim() || 'Unknown';
 
       // Get start button
       const startBtn = row.locator('button.button--action');
@@ -99,7 +118,7 @@ export async function getAvailableMissions(
       if (buttonExists) {
         // Build selector from button class
         const btnClass = (await startBtn.getAttribute('class')) || '';
-        // Extract the mission-specific class (e.g., "overtimelumberjack--mission-start--button")
+        // Extract the mission-specific class (e.g., "mandatoryovertime--mission-start--button")
         const missionBtnMatch = btnClass.match(/(\w+--mission-start--button)/);
         if (missionBtnMatch) {
           buttonSelector = `.${missionBtnMatch[1]}`;
@@ -110,6 +129,12 @@ export async function getAvailableMissions(
           .evaluate((el) => el.classList.contains('disabled'))
           .catch(() => false);
         canStart = !isDisabled;
+        
+        console.log(
+          `[getMissions] Mission "${name}": ${canStart ? 'READY' : 'DISABLED'} (${buttonSelector})`,
+        );
+      } else {
+        console.log(`[getMissions] Mission "${name}": No button found`);
       }
 
       missions.push({
@@ -123,5 +148,8 @@ export async function getAvailableMissions(
     console.error('[getMissions] Failed to read missions:', e);
   }
 
+  console.log(
+    `[getMissions] Total missions: ${missions.length}, Ready to start: ${missions.filter((m) => m.canStart).length}`,
+  );
   return missions;
 }

@@ -35,15 +35,27 @@ export async function handleMissionPhase(
   const availableMissions = await getAvailableMissions(page);
   
   if (availableMissions.length === 0) {
-    console.log(`[${castleName}] No missions available`);
+    console.log(`[${castleName}] No missions found in Tavern menu`);
     return { missionsStarted: 0 };
   }
 
-  console.log(`[${castleName}] Found ${availableMissions.length} available missions`);
+  // Filter to only missions that can be started (not disabled)
+  const readyMissions = availableMissions.filter((m) => m.canStart);
 
-  // Try to start each mission
+  if (readyMissions.length === 0) {
+    console.log(
+      `[${castleName}] Found ${availableMissions.length} missions but none are ready (need units or other requirements)`,
+    );
+    return { missionsStarted: 0 };
+  }
+
+  console.log(
+    `[${castleName}] Found ${readyMissions.length}/${availableMissions.length} missions ready to start`,
+  );
+
+  // Try to start each ready mission
   let missionsStarted = 0;
-  for (const mission of availableMissions) {
+  for (const mission of readyMissions) {
     try {
       const started = await startMission(
         page,
@@ -63,6 +75,15 @@ export async function handleMissionPhase(
     }
   }
 
-  console.log(`[${castleName}] Started ${missionsStarted}/${availableMissions.length} missions`);
+  if (missionsStarted > 0) {
+    console.log(
+      `[${castleName}] ✅ Successfully started ${missionsStarted}/${readyMissions.length} missions`,
+    );
+  } else {
+    console.log(
+      `[${castleName}] ⚠️  Failed to start any missions (${readyMissions.length} were ready)`,
+    );
+  }
+
   return { missionsStarted };
 }
