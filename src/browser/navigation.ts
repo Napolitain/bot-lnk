@@ -179,7 +179,23 @@ export async function navigateToCastleTavern(
     return true;
   }
 
-  // Click the "Buildings" button to ensure we're in buildings context
+  // Try to click "Tavern" directly first - it might already be visible
+  const tavernBtn = page.getByText('Tavern');
+  const tavernBtnVisible = await tavernBtn.isVisible({ timeout: 1000 }).catch(() => false);
+  
+  if (tavernBtnVisible) {
+    // Tavern button is visible, click it
+    await tavernBtn.click();
+    await page.waitForTimeout(500);
+    await dismissPopups(page);
+    
+    // Verify Tavern opened
+    if (await isTavernMenuOpen(page)) {
+      return true;
+    }
+  }
+
+  // Tavern button not visible, need to click Buildings first
   const buildingsBtn = page.getByText('Buildings', { exact: true });
   if (!(await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
     console.warn('[navigateToCastleTavern] Buildings button not found');
@@ -190,8 +206,7 @@ export async function navigateToCastleTavern(
   await page.waitForTimeout(500);
   await dismissPopups(page);
 
-  // Click "Tavern" - use same pattern as Library
-  const tavernBtn = page.getByText('Tavern');
+  // Now click "Tavern"
   if (!(await tavernBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
     console.warn('[navigateToCastleTavern] Tavern button not found in sidebar');
     return false;
@@ -255,7 +270,26 @@ export async function navigateToCastleLibrary(
     console.log('[navigateToCastleLibrary] Current URL:', currentUrl);
   }
 
-  // First click the "Buildings" button to ensure we're in buildings context
+  // Try to click "Library" directly first - it might already be visible
+  const libraryBtn = page.getByText('Library');
+  const libraryBtnVisible = await libraryBtn.isVisible({ timeout: 1000 }).catch(() => false);
+  
+  if (libraryBtnVisible) {
+    // Library button is visible, click it
+    await libraryBtn.click();
+    if (config.debug) {
+      console.log('[navigateToCastleLibrary] Clicked Library button (was already visible)');
+    }
+    await page.waitForTimeout(500);
+    await dismissPopups(page);
+    
+    // Verify Library opened
+    if (await isLibraryMenuOpen(page)) {
+      return true;
+    }
+  }
+
+  // Library button not visible, need to click Buildings first
   const buildingsBtn = page.getByText('Buildings', { exact: true });
   const buildingsBtnVisible = await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false);
   
@@ -289,18 +323,9 @@ export async function navigateToCastleLibrary(
     }
   }
 
-  // Click "Library" - uniform pattern with Tavern
-  const libraryBtn = page.getByText('Library');
-  const libraryBtnVisible = await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false);
-  
-  if (config.debug) {
-    console.log('[navigateToCastleLibrary] Library button visible:', libraryBtnVisible);
-  }
-  
-  if (!libraryBtnVisible) {
-    console.warn(
-      '[navigateToCastleLibrary] Library button not found in sidebar',
-    );
+  // Try clicking Library button again (should be visible after clicking Buildings)
+  if (!(await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+    console.warn('[navigateToCastleLibrary] Library button not found in sidebar');
     if (config.debug) {
       await page.screenshot({ path: 'debug/library-nav-no-library-btn.png', fullPage: true });
     }
