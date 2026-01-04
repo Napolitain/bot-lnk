@@ -26,6 +26,8 @@ import { getResearchedTechnologies } from '../game/technologies.js';
 import { getUnits } from '../game/units.js';
 import {
   ActionType,
+  actionTypeToJSON,
+  buildingTypeToJSON,
   type CastleSolverServiceClient,
   type UnitsRecommendation,
 } from '../generated/proto/config.js';
@@ -317,7 +319,40 @@ async function runBotLoopInternal(
         currentUnits,
       });
 
-      console.log(`[Solve] ${castle.name}: Got action plan (${solverActions.nextAction?.type || 'none'})`);
+      // Log the action plan details
+      const { nextAction, unitsRecommendation } = solverActions;
+      if (nextAction) {
+        const actionTypeName = actionTypeToJSON(nextAction.type);
+        let actionDetail = '';
+        
+        switch (nextAction.type) {
+          case ActionType.ACTION_BUILDING:
+            if (nextAction.building) {
+              const buildingName = buildingTypeToJSON(nextAction.building.buildingType);
+              actionDetail = `${buildingName} → Lv ${nextAction.building.toLevel}`;
+            }
+            break;
+          case ActionType.ACTION_RESEARCH:
+            if (nextAction.research) {
+              actionDetail = nextAction.research.technologyName || 'Unknown tech';
+            }
+            break;
+          case ActionType.ACTION_UNIT_TRAINING:
+            actionDetail = 'Train units';
+            break;
+        }
+        
+        console.log(`[Solve] ${castle.name}: ${actionTypeName} - ${actionDetail}`);
+      } else {
+        console.log(`[Solve] ${castle.name}: No action recommended`);
+      }
+      
+      // Log build order status
+      if (unitsRecommendation) {
+        console.log(
+          `[Solve] ${castle.name}: Build order ${unitsRecommendation.buildOrderComplete ? 'COMPLETE' : 'in progress'}`,
+        );
+      }
     } catch (error) {
       console.warn(`[Solve] ${castle.name}: Failed to get solver actions, skipping`);
     }
@@ -472,6 +507,10 @@ async function runBotLoopInternal(
     return missingUnits.size === 0;
   });
 
+  if (castlesReadyForTrading.length === 0) {
+    console.log('[Execute] No castles ready for trading (waiting for build order completion and unit training)');
+  }
+
   for (const plan of castlesReadyForTrading) {
     const { castle, castleIndex, solverActions } = plan;
     const { unitsRecommendation } = solverActions;
@@ -507,6 +546,11 @@ async function runBotLoopInternal(
   console.log('[Execute] Processing mission actions...');
 
   // Missions run for castles that are ready for trading (same criteria)
+  // Criteria: buildOrderComplete=true AND no missing units
+  if (castlesReadyForTrading.length === 0) {
+    console.log('[Execute] No castles ready for missions (waiting for build order completion and unit training)');
+  }
+
   for (const plan of castlesReadyForTrading) {
     const { castle, castleIndex } = plan;
 
