@@ -86,57 +86,100 @@ src/
 
 ## Current Bot Flow (Detailed)
 
-### Main Loop (`bot/loop.ts`)
+### Main Loop Architecture: Read-Solve-Execute
+
+The bot follows a **Read→Solve→Execute** pattern to ensure state consistency:
 
 ```
-1. STARTUP
+0. STARTUP
    ├── Check URL, navigate to lordsandknights.com if needed
    ├── Dismiss popups
    ├── Login (handles server selection)
    └── Health check (non-blocking)
 
-2. BUILDINGS PHASE (all castles first)
+1. PHASE 1: READ (collect complete game state)
    ├── Navigate to buildings view
-   ├── Read all castle states (getCastles)
-   ├── Click free finish buttons
+   │   └── Read all castle states (getCastles)
+   │       ├── Buildings and levels
+   │       ├── Resources (wood, stone, food, silver)
+   │       ├── Upgrade queues and time remaining
+   │       └── Fortress level
    │
-   └── For each castle:
-       ├── Call solver (getNextActionsForCastle)
-       ├── If buildOrderComplete → queue for recruitment
-       └── Else → try upgrade (handleBuildingPhase)
-           ├── Skip if queue full (maxBuildingQueue)
-           ├── Check if building canUpgrade
-           ├── Check button not disabled (CSS class)
-           ├── Click upgrade button
-           ├── Handle confirmation dialog
-           └── Verify upgrade started
-
-3. RECRUITMENT PHASE (only castles with complete buildings)
+   ├── Navigate to library
+   │   └── Read researched technologies (shared across all castles)
+   │
    ├── Navigate to recruitment view
-   ├── Read all unit counts (getUnits)
+   │   └── Read all unit counts for all castles (getUnits)
    │
-   └── For each castle needing units:
-       ├── Compare current vs recommended units
-       ├── If missingUnits → recruit (handleRecruitingPhase)
-       │   ├── For each missing unit type:
-       │   │   ├── Fill input with amount
-       │   │   ├── Check button not disabled
-       │   │   └── Click recruit
-       └── Else → queue for trading
+   └── Navigate back to buildings view
+       └── Click free finish buttons
 
-4. TRADING PHASE (only castles with complete units)
-   ├── Navigate to trading view
+2. PHASE 2: SOLVE (calculate action plans)
+   └── For each castle:
+       ├── Call solver with COMPLETE state:
+       │   ├── Buildings & resources
+       │   ├── Researched technologies
+       │   └── Current unit counts ← Now available!
+       │
+       └── Store ActionPlan:
+           ├── nextAction (building/research/unit training)
+           ├── unitsRecommendation
+           └── currentUnits
+
+3. PHASE 3: EXECUTE (apply all actions)
+   ├── 3A. Buildings & Research
+   │   ├── Already on buildings view
+   │   └── For each action plan:
+   │       ├── ACTION_RESEARCH → researchTechnology (first castle only)
+   │       └── ACTION_BUILDING → handleBuildingPhase
+   │           ├── Check if building canUpgrade
+   │           ├── Check button not disabled (CSS class)
+   │           ├── Click upgrade button
+   │           ├── Handle confirmation dialog
+   │           └── Verify upgrade started
    │
-   └── For each castle ready for trading:
-       ├── Click castle's trade button
-       ├── Wait for dialog
-       ├── Click "Max" buttons
-       └── Click confirm/send
+   ├── 3B. Recruitment
+   │   ├── Navigate to recruitment view
+   │   ├── Filter plans: castles with missingUnits > 0
+   │   └── For each castle needing units:
+   │       └── handleRecruitingPhase
+   │           ├── For each missing unit type:
+   │           │   ├── Fill input with amount
+   │           │   ├── Check button not disabled
+   │           │   └── Click recruit
+   │
+   ├── 3C. Trading
+   │   ├── Filter plans: buildOrderComplete && no missing units
+   │   └── For each ready castle:
+   │       ├── Navigate to castle's Keep (per-castle dialog)
+   │       └── handleTradingPhase
+   │           ├── Click "Max" buttons
+   │           └── Click confirm/send
+   │
+   └── 3D. Missions
+       └── For each ready castle (same as trading):
+           ├── Navigate to castle's Tavern (per-castle dialog)
+           └── handleMissionPhase
+               └── Start all available missions
 
-5. SLEEP
+4. SLEEP
    ├── Calculate based on min upgrade time remaining
    └── Wait for free finish threshold
 ```
+
+### Why Read-Solve-Execute?
+
+**Before (Old Architecture):**
+- Read castles → Call solver → Execute → Read castles again → Call solver → Execute...
+- **Problem:** State became stale after first castle's actions
+- **Problem:** Units weren't read until Phase 2, so solver didn't have unit counts
+
+**After (New Architecture):**
+- Read ALL state once → Call solver N times with complete state → Execute ALL actions
+- **Benefit:** Solver receives consistent, complete state for all castles
+- **Benefit:** Units available to solver from the start
+- **Benefit:** Clear separation of concerns (read/solve/execute)
+- **Benefit:** More efficient - only 3 navigation cycles instead of N per phase
 
 ### What Works ✅
 
@@ -144,7 +187,10 @@ src/
 |---------|--------|-------|
 | Login | ✅ Works | Handles server selection, remember-me |
 | Buildings view scraping | ✅ Works | All castles, resources, levels, upgrade status |
-| Solver integration | ✅ Works | gRPC client, deterministic results |
+| Recruitment view scraping | ✅ Works | All castles, all unit counts |
+| Library navigation | ✅ Works | Fixed selector to use `.icon-knowledge` |
+| Technology scraping | ✅ Works | Reads researched technologies correctly |
+| Solver integration | ✅ Works | gRPC client with complete state (buildings + units + techs) |
 | Building upgrades | ✅ Works | Clicks upgrade, handles confirmation |
 | Disabled button detection | ✅ Works | Checks CSS `disabled` class |
 | Free finish buttons | ✅ Works | Clicks available free finishes |
@@ -152,21 +198,21 @@ src/
 | Health checks | ✅ Works | Overlay detection, page state |
 | Recovery | ✅ Works | Escalating: popups → reload → reset |
 | Research | ✅ Works | Technology research in library |
+| Missions | ✅ Works | Mission execution integrated into main loop |
+| Read-Solve-Execute pattern | ✅ Works | State consistency guaranteed |
 
 ### What Partially Works ⚠️
 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Recruitment | ⚠️ Partial | Clicks work, but input filling may be flaky |
-| Unit count reading | ⚠️ Partial | Works but verification after recruit is minimal |
 | Stale detection | ⚠️ Partial | Implemented but may need tuning |
+| Trading | ⚠️ Untested | Dialog interaction may be incomplete |
 
 ### What Doesn't Work / Not Implemented ❌
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Trading | ❌ Untested | Dialog interaction may be incomplete |
-| Multi-castle trading | ❌ Unknown | Trading view is per-castle dialog |
 | Attack/Defense | ❌ Not implemented | No combat features |
 | Alliance features | ❌ Not implemented | |
 | Map interactions | ❌ Not implemented | |
@@ -239,9 +285,9 @@ sleepMs = clamp(sleepMs, minMs, maxMs);
 
 1. **Trading not fully tested** - Dialog flow may need adjustment
 2. **Recruitment verification** - Only checks health, not actual unit increase
-3. **Multi-castle coordination** - Currently sequential, could be smarter
-4. **Resource waiting** - Bot skips if disabled, could wait for resources
-5. **Research timing** - Only researches for first castle
+3. **Resource waiting** - Bot skips if disabled, could wait for resources
+4. ~~**State consistency issue**~~ - ✅ FIXED: Read-Solve-Execute pattern implemented
+5. ~~**Units not available to solver**~~ - ✅ FIXED: Units read in Phase 1 before solver calls
 
 ## Philosophy
 
