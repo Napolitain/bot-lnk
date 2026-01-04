@@ -8,6 +8,7 @@ export enum MissionType {
   FORGING_TOOLS = 'ForgingTools',
   MARKET_DAY = 'MarketDay',
   FEED_MINERS = 'FeedMiners',
+  HIRE_STONECUTTERS = 'HireStonecutters',
   OVERTIME_LUMBERJACK = 'OvertimeLumberjack',
   OVERTIME_QUARRY = 'OvertimeQuarry',
   OVERTIME_ORE_MINE = 'OvertimeOremine',
@@ -19,6 +20,7 @@ const ICON_CLASS_TO_MISSION: Record<string, MissionType> = {
   ForgingTools: MissionType.FORGING_TOOLS,
   MarketDay: MissionType.MARKET_DAY,
   FeedMiners: MissionType.FEED_MINERS,
+  HireStonecutters: MissionType.HIRE_STONECUTTERS,
   OvertimeLumberjack: MissionType.OVERTIME_LUMBERJACK,
   OvertimeQuarry: MissionType.OVERTIME_QUARRY,
   OvertimeOremine: MissionType.OVERTIME_ORE_MINE,
@@ -31,6 +33,7 @@ export const MISSION_TYPE_TO_NAME: Record<MissionType, string> = {
   [MissionType.FORGING_TOOLS]: 'Forging tools',
   [MissionType.MARKET_DAY]: 'Market day',
   [MissionType.FEED_MINERS]: 'Feed miners',
+  [MissionType.HIRE_STONECUTTERS]: 'Hire stone cutters',
   [MissionType.OVERTIME_LUMBERJACK]: 'Overtime wood',
   [MissionType.OVERTIME_QUARRY]: 'Overtime stone',
   [MissionType.OVERTIME_ORE_MINE]: 'Overtime ore',
@@ -118,10 +121,20 @@ export async function getAvailableMissions(
       if (buttonExists) {
         // Build selector from button class
         const btnClass = (await startBtn.getAttribute('class')) || '';
+        
+        // Check if this is a speedup button (mission already running)
+        if (btnClass.includes('icon-mission-speedup')) {
+          console.log(`[getMissions] Mission "${name}": Already running (has speedup button)`);
+          continue; // Skip missions that are already running
+        }
+        
         // Extract the mission-specific class (e.g., "mandatoryovertime--mission-start--button")
         const missionBtnMatch = btnClass.match(/(\w+--mission-start--button)/);
         if (missionBtnMatch) {
           buttonSelector = `.${missionBtnMatch[1]}`;
+        } else {
+          console.log(`[getMissions] Mission "${name}": No start button selector found`);
+          continue; // Skip if no start button class
         }
 
         // Check if button is disabled
