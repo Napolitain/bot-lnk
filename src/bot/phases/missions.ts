@@ -5,6 +5,7 @@ import { getAvailableMissions } from '../../game/missions.js';
 
 export interface MissionPhaseResult {
   missionsStarted: number;
+  minTimeRemainingMs: number | null;
 }
 
 /**
@@ -28,7 +29,7 @@ export async function handleMissionPhase(
   const navSuccess = await navigateToCastleTavern(page, castleIndex);
   if (!navSuccess) {
     console.warn(`[${castleName}] Failed to navigate to Tavern, skipping missions`);
-    return { missionsStarted: 0 };
+    return { missionsStarted: 0, minTimeRemainingMs: null };
   }
 
   // Read available missions from DOM
@@ -36,17 +37,30 @@ export async function handleMissionPhase(
   
   if (availableMissions.length === 0) {
     console.log(`[${castleName}] No missions found in Tavern menu`);
-    return { missionsStarted: 0 };
+    return { missionsStarted: 0, minTimeRemainingMs: null };
   }
 
-  // Filter to only missions that can be started (not disabled)
+  // Find minimum time remaining from running missions
+  let minTimeRemainingMs: number | null = null;
+  const runningMissions = availableMissions.filter((m) => m.state === 'running');
+  for (const mission of runningMissions) {
+    if (mission.timeRemainingMs !== undefined) {
+      if (minTimeRemainingMs === null || mission.timeRemainingMs < minTimeRemainingMs) {
+        minTimeRemainingMs = mission.timeRemainingMs;
+      }
+    }
+  }
+
+  // Filter to only missions that can be started (not disabled or running)
   const readyMissions = availableMissions.filter((m) => m.canStart);
 
   if (readyMissions.length === 0) {
+    const runningCount = runningMissions.length;
+    const disabledCount = availableMissions.filter((m) => m.state === 'disabled').length;
     console.log(
-      `[${castleName}] Found ${availableMissions.length} missions but none are ready (need units or other requirements)`,
+      `[${castleName}] No missions ready to start (${runningCount} running, ${disabledCount} disabled)`,
     );
-    return { missionsStarted: 0 };
+    return { missionsStarted: 0, minTimeRemainingMs };
   }
 
   console.log(
@@ -85,5 +99,5 @@ export async function handleMissionPhase(
     );
   }
 
-  return { missionsStarted };
+  return { missionsStarted, minTimeRemainingMs };
 }

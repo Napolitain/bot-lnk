@@ -554,6 +554,13 @@ async function runBotLoopInternal(
     try {
       const result = await handleMissionPhase(page, castle.name, castleIndex);
       totalMissions += result.missionsStarted;
+      
+      // Track mission times for sleep calculation
+      if (result.minTimeRemainingMs !== null) {
+        if (minTimeRemainingMs === null || result.minTimeRemainingMs < minTimeRemainingMs) {
+          minTimeRemainingMs = result.minTimeRemainingMs;
+        }
+      }
     } catch (error) {
       console.warn(`[Execute] ${castle.name}: Mission phase failed:`, error);
     }

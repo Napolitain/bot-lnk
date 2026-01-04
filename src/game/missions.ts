@@ -39,6 +39,41 @@ export const MISSION_TYPE_TO_NAME: Record<MissionType, string> = {
   [MissionType.OVERTIME_ORE_MINE]: 'Overtime ore',
 };
 
+/** Parse timer string (HH:MM:SS or MM:SS) to milliseconds */
+function parseTimerToMs(timerText: string): number {
+  const parts = timerText.trim().split(':').map(p => Number.parseInt(p, 10));
+  
+  if (parts.length === 3) {
+    // HH:MM:SS
+    const [hours, minutes, seconds] = parts;
+    return (hours * 3600 + minutes * 60 + seconds) * 1000;
+  }
+  
+  if (parts.length === 2) {
+    // MM:SS
+    const [minutes, seconds] = parts;
+    return (minutes * 60 + seconds) * 1000;
+  }
+  
+  return 0;
+}
+
+/** Format milliseconds to readable string */
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
 export interface AvailableMission {
   type: MissionType;
   name: string;
@@ -46,6 +81,10 @@ export interface AvailableMission {
   buttonSelector: string;
   /** Whether the start button is enabled */
   canStart: boolean;
+  /** Mission state */
+  state: 'available' | 'running' | 'disabled';
+  /** Time remaining in milliseconds (only for running missions) */
+  timeRemainingMs?: number;
 }
 
 /** Check if Tavern menu is open (shows "Available missions" section) */
@@ -111,12 +150,14 @@ export async function getAvailableMissions(
         }
       }
 
-      // Get start button
+      // Get start button or speedup button
       const startBtn = row.locator('button.button--action');
       const buttonExists = (await startBtn.count()) > 0;
 
       let canStart = false;
       let buttonSelector = '';
+      let state: 'available' | 'running' | 'disabled' = 'disabled';
+      let timeRemainingMs: number | undefined;
 
       if (buttonExists) {
         // Build selector from button class
@@ -124,8 +165,29 @@ export async function getAvailableMissions(
         
         // Check if this is a speedup button (mission already running)
         if (btnClass.includes('icon-mission-speedup')) {
-          console.log(`[getMissions] Mission "${name}": Already running (has speedup button)`);
-          continue; // Skip missions that are already running
+          state = 'running';
+          
+          // Parse timer if present
+          const timerBlock = row.locator('.timer-block__main');
+          if (await timerBlock.isVisible({ timeout: 500 }).catch(() => false)) {
+            const timerText = (await timerBlock.textContent()) || '';
+            timeRemainingMs = parseTimerToMs(timerText);
+            console.log(
+              `[getMissions] Mission "${name}": Running (${formatTime(timeRemainingMs)})`,
+            );
+          } else {
+            console.log(`[getMissions] Mission "${name}": Running (no timer found)`);
+          }
+          
+          missions.push({
+            type: missionType,
+            name,
+            buttonSelector: '', // No start button when running
+            canStart: false,
+            state,
+            timeRemainingMs,
+          });
+          continue;
         }
         
         // Extract the mission-specific class (e.g., "mandatoryovertime--mission-start--button")
@@ -142,6 +204,7 @@ export async function getAvailableMissions(
           .evaluate((el) => el.classList.contains('disabled'))
           .catch(() => false);
         canStart = !isDisabled;
+        state = canStart ? 'available' : 'disabled';
         
         console.log(
           `[getMissions] Mission "${name}": ${canStart ? 'READY' : 'DISABLED'} (${buttonSelector})`,
@@ -155,6 +218,8 @@ export async function getAvailableMissions(
         name,
         buttonSelector,
         canStart,
+        state,
+        timeRemainingMs,
       });
     }
   } catch (e) {
