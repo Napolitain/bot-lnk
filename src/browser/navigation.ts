@@ -165,7 +165,8 @@ async function isTavernMenuOpen(page: Page): Promise<boolean> {
 
 /**
  * Navigate to Tavern menu for missions (uses per-castle buildings sidebar).
- * Path: Buildings button → Tavern in sidebar
+ * Path: Buildings button → Tavern
+ * Pattern matches Library navigation for consistency.
  */
 export async function navigateToCastleTavern(
   page: Page,
@@ -178,18 +179,19 @@ export async function navigateToCastleTavern(
     return true;
   }
 
-  // First click the "Buildings" button to ensure we're in buildings context
+  // Click the "Buildings" button to ensure we're in buildings context
   const buildingsBtn = page.getByText('Buildings', { exact: true });
-  if (await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await buildingsBtn.click();
-    await page.waitForTimeout(500);
-    await dismissPopups(page);
+  if (!(await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+    console.warn('[navigateToCastleTavern] Buildings button not found');
+    return false;
   }
 
-  // Click "Tavern" in the per-castle buildings sidebar
-  const tavernBtn = page
-    .locator('#menu-section-general-container')
-    .getByText('Tavern');
+  await buildingsBtn.click();
+  await page.waitForTimeout(500);
+  await dismissPopups(page);
+
+  // Click "Tavern" - use same pattern as Library
+  const tavernBtn = page.getByText('Tavern');
   if (!(await tavernBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
     console.warn('[navigateToCastleTavern] Tavern button not found in sidebar');
     return false;
@@ -287,10 +289,8 @@ export async function navigateToCastleLibrary(
     }
   }
 
-  // Click "Library" in the buildings sidebar
-  const libraryBtn = page
-    .locator('#menu-section-general-container')
-    .getByText('Library');
+  // Click "Library" - uniform pattern with Tavern
+  const libraryBtn = page.getByText('Library');
   const libraryBtnVisible = await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false);
   
   if (config.debug) {
