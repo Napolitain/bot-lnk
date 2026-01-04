@@ -1,4 +1,5 @@
 import type { Page } from 'playwright';
+import { config } from '../config.js';
 import { pollUntil } from '../utils/index.js';
 import { dismissPopups } from './popups.js';
 
@@ -113,7 +114,7 @@ export async function navigateToCastleKeep(
   }
 
   // First click the "Buildings" button to ensure we're in buildings context
-  const buildingsBtn = page.getByText('Buildings');
+  const buildingsBtn = page.getByText('Buildings', { exact: true });
   if (await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await buildingsBtn.click();
     await page.waitForTimeout(500);
@@ -178,7 +179,7 @@ export async function navigateToCastleTavern(
   }
 
   // First click the "Buildings" button to ensure we're in buildings context
-  const buildingsBtn = page.getByText('Buildings');
+  const buildingsBtn = page.getByText('Buildings', { exact: true });
   if (await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await buildingsBtn.click();
     await page.waitForTimeout(500);
@@ -218,11 +219,12 @@ export async function navigateToCastleTavern(
 /** Check if Library menu is open (shows research technologies) */
 async function isLibraryMenuOpen(page: Page): Promise<boolean> {
   try {
-    // Look for any technology name to confirm Library menu is open
-    const techSection = page.locator(
-      '.menu-list-title-basic, .menu-list-element-basic',
-    );
-    return await techSection.first().isVisible({ timeout: 500 });
+    // Look for technology-specific icon (icon-knowledge) which only appears in Library
+    const hasTechIcon = await page
+      .locator('.icon-knowledge')
+      .first()
+      .isVisible({ timeout: 500 });
+    return hasTechIcon;
   } catch {
     return false;
   }
@@ -240,29 +242,75 @@ export async function navigateToCastleLibrary(
 
   // If already in Library menu, we're done
   if (await isLibraryMenuOpen(page)) {
+    if (config.debug) {
+      console.log('[navigateToCastleLibrary] Already in Library menu');
+    }
     return true;
   }
 
-  // First click the "Buildings" button to ensure we're in buildings context
-  const buildingsBtn = page.getByText('Buildings');
-  if (await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await buildingsBtn.click();
-    await page.waitForTimeout(500);
-    await dismissPopups(page);
+  if (config.debug) {
+    const currentUrl = page.url();
+    console.log('[navigateToCastleLibrary] Current URL:', currentUrl);
   }
 
-  // Click "Library" in the global buildings sidebar
+  // First click the "Buildings" button to ensure we're in buildings context
+  const buildingsBtn = page.getByText('Buildings', { exact: true });
+  const buildingsBtnVisible = await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false);
+  
+  if (config.debug) {
+    console.log('[navigateToCastleLibrary] Buildings button visible:', buildingsBtnVisible);
+  }
+  
+  if (buildingsBtnVisible) {
+    await buildingsBtn.click();
+    if (config.debug) {
+      console.log('[navigateToCastleLibrary] Clicked Buildings button');
+    }
+    await page.waitForTimeout(500);
+    await dismissPopups(page);
+  } else {
+    console.warn('[navigateToCastleLibrary] Buildings button not found!');
+    if (config.debug) {
+      await page.screenshot({ path: 'debug/library-nav-no-buildings-btn.png', fullPage: true });
+    }
+  }
+
+  if (config.debug) {
+    // Check if sidebar container exists
+    const sidebarExists = await page.locator('#menu-section-general-container').isVisible({ timeout: 1000 }).catch(() => false);
+    console.log('[navigateToCastleLibrary] Sidebar container visible:', sidebarExists);
+
+    // List all text in sidebar
+    if (sidebarExists) {
+      const sidebarTexts = await page.locator('#menu-section-general-container').allTextContents();
+      console.log('[navigateToCastleLibrary] Sidebar contents:', sidebarTexts);
+    }
+  }
+
+  // Click "Library" in the buildings sidebar
   const libraryBtn = page
     .locator('#menu-section-general-container')
     .getByText('Library');
-  if (!(await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+  const libraryBtnVisible = await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false);
+  
+  if (config.debug) {
+    console.log('[navigateToCastleLibrary] Library button visible:', libraryBtnVisible);
+  }
+  
+  if (!libraryBtnVisible) {
     console.warn(
       '[navigateToCastleLibrary] Library button not found in sidebar',
     );
+    if (config.debug) {
+      await page.screenshot({ path: 'debug/library-nav-no-library-btn.png', fullPage: true });
+    }
     return false;
   }
 
   await libraryBtn.click();
+  if (config.debug) {
+    console.log('[navigateToCastleLibrary] Clicked Library button');
+  }
   await page.waitForTimeout(500);
   await dismissPopups(page);
 
@@ -277,8 +325,14 @@ export async function navigateToCastleLibrary(
 
   if (!libraryOpened) {
     console.warn('[navigateToCastleLibrary] Library menu did not open');
+    if (config.debug) {
+      await page.screenshot({ path: 'debug/library-nav-menu-not-open.png', fullPage: true });
+    }
     return false;
   }
 
+  if (config.debug) {
+    console.log('[navigateToCastleLibrary] Successfully navigated to Library');
+  }
   return true;
 }

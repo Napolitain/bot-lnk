@@ -44,6 +44,14 @@ export async function getNextActionsForCastle(
     targetLevels: { targets: config.targets },
   };
 
+  // Debug: Log researched technologies being sent
+  if (config.debug) {
+    console.log(
+      `[Solver] Sending ${castle.config.researchedTechnologies.length} researched techs:`,
+      castle.config.researchedTechnologies,
+    );
+  }
+
   try {
     const response = await client.solve(request);
     return {

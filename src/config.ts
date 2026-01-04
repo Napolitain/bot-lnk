@@ -27,6 +27,9 @@ export const config = {
   // Enable performance metrics collection
   enableMetrics: process.env.ENABLE_METRICS === 'true',
 
+  // Debug mode - verbose logging and screenshots
+  debug: process.env.DEBUG === 'true',
+
   // Blocklist configuration - loaded from BLOCKLIST_FILE or uses defaults
   blocklist: loadBlocklist(),
 

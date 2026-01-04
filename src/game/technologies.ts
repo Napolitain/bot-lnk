@@ -39,9 +39,9 @@ export async function getResearchedTechnologies(
       return [];
     }
 
-    // Get all technology rows
+    // Get all technology rows (only elements with icon-knowledge)
     const techRows = page.locator(
-      '.menu-list-element-basic.clickable.with-icon-left',
+      '.menu-list-element-basic.clickable.with-icon-left:has(.icon-knowledge)',
     );
     const rowCount = await techRows.count();
 
