@@ -547,13 +547,8 @@ async function runBotLoopInternal(
   metricsCollector?.startPeriod('missions_execution');
   console.log('[Execute] Processing mission actions...');
 
-  // Missions run for castles that are ready for trading (same criteria)
-  // Criteria: buildOrderComplete=true AND no missing units
-  if (castlesReadyForTrading.length === 0) {
-    console.log('[Execute] No castles ready for missions (waiting for build order completion and unit training)');
-  }
-
-  for (const plan of castlesReadyForTrading) {
+  // Missions should run for ALL castles (mission availability is checked per-castle in Tavern menu)
+  for (const plan of actionPlans) {
     const { castle, castleIndex } = plan;
 
     try {
