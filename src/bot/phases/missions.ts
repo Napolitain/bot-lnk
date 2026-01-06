@@ -28,13 +28,15 @@ export async function handleMissionPhase(
   // Navigate to Tavern menu
   const navSuccess = await navigateToCastleTavern(page, castleIndex);
   if (!navSuccess) {
-    console.warn(`[${castleName}] Failed to navigate to Tavern, skipping missions`);
+    console.warn(
+      `[${castleName}] Failed to navigate to Tavern, skipping missions`,
+    );
     return { missionsStarted: 0, minTimeRemainingMs: null };
   }
 
   // Read available missions from DOM
   const availableMissions = await getAvailableMissions(page);
-  
+
   if (availableMissions.length === 0) {
     console.log(`[${castleName}] No missions found in Tavern menu`);
     return { missionsStarted: 0, minTimeRemainingMs: null };
@@ -42,10 +44,15 @@ export async function handleMissionPhase(
 
   // Find minimum time remaining from running missions
   let minTimeRemainingMs: number | null = null;
-  const runningMissions = availableMissions.filter((m) => m.state === 'running');
+  const runningMissions = availableMissions.filter(
+    (m) => m.state === 'running',
+  );
   for (const mission of runningMissions) {
     if (mission.timeRemainingMs !== undefined) {
-      if (minTimeRemainingMs === null || mission.timeRemainingMs < minTimeRemainingMs) {
+      if (
+        minTimeRemainingMs === null ||
+        mission.timeRemainingMs < minTimeRemainingMs
+      ) {
         minTimeRemainingMs = mission.timeRemainingMs;
       }
     }
@@ -56,7 +63,9 @@ export async function handleMissionPhase(
 
   if (readyMissions.length === 0) {
     const runningCount = runningMissions.length;
-    const disabledCount = availableMissions.filter((m) => m.state === 'disabled').length;
+    const disabledCount = availableMissions.filter(
+      (m) => m.state === 'disabled',
+    ).length;
     console.log(
       `[${castleName}] No missions ready to start (${runningCount} running, ${disabledCount} disabled)`,
     );
@@ -93,11 +102,16 @@ export async function handleMissionPhase(
   if (missionsStarted > 0) {
     console.log(`[${castleName}] Re-reading mission timers...`);
     const updatedMissions = await getAvailableMissions(page);
-    const nowRunningMissions = updatedMissions.filter((m) => m.state === 'running');
-    
+    const nowRunningMissions = updatedMissions.filter(
+      (m) => m.state === 'running',
+    );
+
     for (const mission of nowRunningMissions) {
       if (mission.timeRemainingMs !== undefined) {
-        if (minTimeRemainingMs === null || mission.timeRemainingMs < minTimeRemainingMs) {
+        if (
+          minTimeRemainingMs === null ||
+          mission.timeRemainingMs < minTimeRemainingMs
+        ) {
           minTimeRemainingMs = mission.timeRemainingMs;
         }
       }

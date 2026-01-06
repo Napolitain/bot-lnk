@@ -181,14 +181,16 @@ export async function navigateToCastleTavern(
 
   // Try to click "Tavern" directly first - it might already be visible
   const tavernBtn = page.getByText('Tavern');
-  const tavernBtnVisible = await tavernBtn.isVisible({ timeout: 1000 }).catch(() => false);
-  
+  const tavernBtnVisible = await tavernBtn
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
+
   if (tavernBtnVisible) {
     // Tavern button is visible, click it
     await tavernBtn.click();
     await page.waitForTimeout(500);
     await dismissPopups(page);
-    
+
     // Verify Tavern opened
     if (await isTavernMenuOpen(page)) {
       return true;
@@ -272,17 +274,21 @@ export async function navigateToCastleLibrary(
 
   // Try to click "Library" directly first - it might already be visible
   const libraryBtn = page.getByText('Library');
-  const libraryBtnVisible = await libraryBtn.isVisible({ timeout: 1000 }).catch(() => false);
-  
+  const libraryBtnVisible = await libraryBtn
+    .isVisible({ timeout: 1000 })
+    .catch(() => false);
+
   if (libraryBtnVisible) {
     // Library button is visible, click it
     await libraryBtn.click();
     if (config.debug) {
-      console.log('[navigateToCastleLibrary] Clicked Library button (was already visible)');
+      console.log(
+        '[navigateToCastleLibrary] Clicked Library button (was already visible)',
+      );
     }
     await page.waitForTimeout(500);
     await dismissPopups(page);
-    
+
     // Verify Library opened
     if (await isLibraryMenuOpen(page)) {
       return true;
@@ -291,12 +297,17 @@ export async function navigateToCastleLibrary(
 
   // Library button not visible, need to click Buildings first
   const buildingsBtn = page.getByText('Buildings', { exact: true });
-  const buildingsBtnVisible = await buildingsBtn.isVisible({ timeout: 2000 }).catch(() => false);
-  
+  const buildingsBtnVisible = await buildingsBtn
+    .isVisible({ timeout: 2000 })
+    .catch(() => false);
+
   if (config.debug) {
-    console.log('[navigateToCastleLibrary] Buildings button visible:', buildingsBtnVisible);
+    console.log(
+      '[navigateToCastleLibrary] Buildings button visible:',
+      buildingsBtnVisible,
+    );
   }
-  
+
   if (buildingsBtnVisible) {
     await buildingsBtn.click();
     if (config.debug) {
@@ -307,27 +318,43 @@ export async function navigateToCastleLibrary(
   } else {
     console.warn('[navigateToCastleLibrary] Buildings button not found!');
     if (config.debug) {
-      await page.screenshot({ path: 'debug/library-nav-no-buildings-btn.png', fullPage: true });
+      await page.screenshot({
+        path: 'debug/library-nav-no-buildings-btn.png',
+        fullPage: true,
+      });
     }
   }
 
   if (config.debug) {
     // Check if sidebar container exists
-    const sidebarExists = await page.locator('#menu-section-general-container').isVisible({ timeout: 1000 }).catch(() => false);
-    console.log('[navigateToCastleLibrary] Sidebar container visible:', sidebarExists);
+    const sidebarExists = await page
+      .locator('#menu-section-general-container')
+      .isVisible({ timeout: 1000 })
+      .catch(() => false);
+    console.log(
+      '[navigateToCastleLibrary] Sidebar container visible:',
+      sidebarExists,
+    );
 
     // List all text in sidebar
     if (sidebarExists) {
-      const sidebarTexts = await page.locator('#menu-section-general-container').allTextContents();
+      const sidebarTexts = await page
+        .locator('#menu-section-general-container')
+        .allTextContents();
       console.log('[navigateToCastleLibrary] Sidebar contents:', sidebarTexts);
     }
   }
 
   // Try clicking Library button again (should be visible after clicking Buildings)
   if (!(await libraryBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
-    console.warn('[navigateToCastleLibrary] Library button not found in sidebar');
+    console.warn(
+      '[navigateToCastleLibrary] Library button not found in sidebar',
+    );
     if (config.debug) {
-      await page.screenshot({ path: 'debug/library-nav-no-library-btn.png', fullPage: true });
+      await page.screenshot({
+        path: 'debug/library-nav-no-library-btn.png',
+        fullPage: true,
+      });
     }
     return false;
   }
@@ -351,7 +378,10 @@ export async function navigateToCastleLibrary(
   if (!libraryOpened) {
     console.warn('[navigateToCastleLibrary] Library menu did not open');
     if (config.debug) {
-      await page.screenshot({ path: 'debug/library-nav-menu-not-open.png', fullPage: true });
+      await page.screenshot({
+        path: 'debug/library-nav-menu-not-open.png',
+        fullPage: true,
+      });
     }
     return false;
   }

@@ -237,7 +237,9 @@ async function runBotLoopInternal(
       for (const castle of castles) {
         castle.config.researchedTechnologies = researchedTechs;
       }
-      console.log(`[Read] Found ${researchedTechs.length} researched technologies`);
+      console.log(
+        `[Read] Found ${researchedTechs.length} researched technologies`,
+      );
     } catch (e) {
       console.warn('[Read] Failed to read researched technologies:', e);
     }
@@ -260,7 +262,9 @@ async function runBotLoopInternal(
       { maxAttempts: 2, delayMs: 1000 },
     );
     if (!recruitHealth.healthy) {
-      console.warn(`[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`);
+      console.warn(
+        `[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`,
+      );
     }
 
     allCastleUnits = await withRecovery(
@@ -271,7 +275,9 @@ async function runBotLoopInternal(
     );
     console.log(`[Read] Read units for ${allCastleUnits.length} castles`);
   } else {
-    console.warn('[Read] Could not navigate to recruitment view, units will be empty');
+    console.warn(
+      '[Read] Could not navigate to recruitment view, units will be empty',
+    );
   }
 
   // Navigate back to buildings view for actions
@@ -304,13 +310,14 @@ async function runBotLoopInternal(
 
     try {
       const solverActions = await getNextActionsForCastle(solverClient, castle);
-      
+
       // Get current units for this castle
       const castleUnits = allCastleUnits.find((cu) => cu.name === castle.name);
-      const currentUnits = castleUnits?.units.map((u) => ({
-        type: u.type,
-        count: u.count,
-      })) || [];
+      const currentUnits =
+        castleUnits?.units.map((u) => ({
+          type: u.type,
+          count: u.count,
+        })) || [];
 
       actionPlans.push({
         castle,
@@ -324,39 +331,48 @@ async function runBotLoopInternal(
       if (nextAction) {
         const actionTypeName = actionTypeToJSON(nextAction.type);
         let actionDetail = '';
-        
+
         switch (nextAction.type) {
           case ActionType.ACTION_BUILDING:
             if (nextAction.building) {
-              const buildingName = buildingTypeToJSON(nextAction.building.buildingType);
+              const buildingName = buildingTypeToJSON(
+                nextAction.building.buildingType,
+              );
               actionDetail = `${buildingName} → Lv ${nextAction.building.toLevel}`;
             }
             break;
           case ActionType.ACTION_RESEARCH:
             if (nextAction.research) {
-              actionDetail = nextAction.research.technologyName || 'Unknown tech';
+              actionDetail =
+                nextAction.research.technologyName || 'Unknown tech';
             }
             break;
           case ActionType.ACTION_UNIT_TRAINING:
             actionDetail = 'Train units';
             break;
         }
-        
-        console.log(`[Solve] ${castle.name}: ${actionTypeName} - ${actionDetail}`);
+
+        console.log(
+          `[Solve] ${castle.name}: ${actionTypeName} - ${actionDetail}`,
+        );
       } else {
         console.log(`[Solve] ${castle.name}: No action recommended`);
       }
-      
+
       // Log build order status
       if (unitsRecommendation) {
         console.log(
           `[Solve] ${castle.name}: Build order ${unitsRecommendation.buildOrderComplete ? 'COMPLETE ✅' : 'IN PROGRESS 🔨'}`,
         );
       } else {
-        console.log(`[Solve] ${castle.name}: No units recommendation from solver`);
+        console.log(
+          `[Solve] ${castle.name}: No units recommendation from solver`,
+        );
       }
     } catch (error) {
-      console.warn(`[Solve] ${castle.name}: Failed to get solver actions, skipping`);
+      console.warn(
+        `[Solve] ${castle.name}: Failed to get solver actions, skipping`,
+      );
     }
   }
 
@@ -423,7 +439,9 @@ async function runBotLoopInternal(
           break;
 
         default:
-          console.warn(`[Execute] ${castle.name}: Unknown action type ${nextAction.type}`);
+          console.warn(
+            `[Execute] ${castle.name}: Unknown action type ${nextAction.type}`,
+          );
       }
     } catch (error) {
       console.warn(`[Execute] ${castle.name}: Action failed, continuing...`);
@@ -436,13 +454,16 @@ async function runBotLoopInternal(
   metricsCollector?.startPeriod('recruitment_execution');
   console.log('[Execute] Processing recruitment actions...');
 
-  const castlesNeedingRecruitment = actionPlans.filter(plan => {
+  const castlesNeedingRecruitment = actionPlans.filter((plan) => {
     const { solverActions, currentUnits } = plan;
     const { unitsRecommendation } = solverActions;
-    
+
     if (!unitsRecommendation) return false;
-    
-    const { missingUnits } = determineCastlePhase(unitsRecommendation, currentUnits);
+
+    const { missingUnits } = determineCastlePhase(
+      unitsRecommendation,
+      currentUnits,
+    );
     return missingUnits.size > 0;
   });
 
@@ -461,7 +482,9 @@ async function runBotLoopInternal(
         { maxAttempts: 2, delayMs: 1000 },
       );
       if (!recruitHealth.healthy) {
-        console.warn(`[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`);
+        console.warn(
+          `[Health] Recruitment view issues: ${recruitHealth.issues.join(', ')}`,
+        );
       }
 
       for (const plan of castlesNeedingRecruitment) {
@@ -470,7 +493,10 @@ async function runBotLoopInternal(
 
         if (!unitsRecommendation) continue;
 
-        const { missingUnits } = determineCastlePhase(unitsRecommendation, currentUnits);
+        const { missingUnits } = determineCastlePhase(
+          unitsRecommendation,
+          currentUnits,
+        );
 
         if (missingUnits.size > 0) {
           printUnitComparison(castle.name, currentUnits, unitsRecommendation);
@@ -484,12 +510,16 @@ async function runBotLoopInternal(
             );
             if (result.recruited) totalRecruits++;
           } catch (error) {
-            console.warn(`[Execute] ${castle.name}: Recruiting failed, continuing...`);
+            console.warn(
+              `[Execute] ${castle.name}: Recruiting failed, continuing...`,
+            );
           }
         }
       }
     } else {
-      console.warn('[Execute] Could not navigate to recruitment view, skipping recruitment');
+      console.warn(
+        '[Execute] Could not navigate to recruitment view, skipping recruitment',
+      );
     }
   }
 
@@ -499,18 +529,24 @@ async function runBotLoopInternal(
   metricsCollector?.startPeriod('trading_execution');
   console.log('[Execute] Processing trading actions...');
 
-  const castlesReadyForTrading = actionPlans.filter(plan => {
+  const castlesReadyForTrading = actionPlans.filter((plan) => {
     const { solverActions, currentUnits } = plan;
     const { unitsRecommendation } = solverActions;
-    
-    if (!unitsRecommendation || !unitsRecommendation.buildOrderComplete) return false;
-    
-    const { missingUnits } = determineCastlePhase(unitsRecommendation, currentUnits);
+
+    if (!unitsRecommendation || !unitsRecommendation.buildOrderComplete)
+      return false;
+
+    const { missingUnits } = determineCastlePhase(
+      unitsRecommendation,
+      currentUnits,
+    );
     return missingUnits.size === 0;
   });
 
   if (castlesReadyForTrading.length === 0) {
-    console.log('[Execute] No castles ready for trading (waiting for build order completion and unit training)');
+    console.log(
+      '[Execute] No castles ready for trading (waiting for build order completion and unit training)',
+    );
   }
 
   for (const plan of castlesReadyForTrading) {
@@ -537,7 +573,9 @@ async function runBotLoopInternal(
         console.warn(`[Execute] ${castle.name}: Trading failed, continuing...`);
       }
     } else {
-      console.warn(`[Execute] ${castle.name}: Could not navigate to Keep, skipping trade`);
+      console.warn(
+        `[Execute] ${castle.name}: Could not navigate to Keep, skipping trade`,
+      );
     }
   }
 
@@ -554,10 +592,13 @@ async function runBotLoopInternal(
     try {
       const result = await handleMissionPhase(page, castle.name, castleIndex);
       totalMissions += result.missionsStarted;
-      
+
       // Track mission times for sleep calculation
       if (result.minTimeRemainingMs !== null) {
-        if (minTimeRemainingMs === null || result.minTimeRemainingMs < minTimeRemainingMs) {
+        if (
+          minTimeRemainingMs === null ||
+          result.minTimeRemainingMs < minTimeRemainingMs
+        ) {
           minTimeRemainingMs = result.minTimeRemainingMs;
         }
       }

@@ -1,5 +1,4 @@
 import type { Page } from 'playwright';
-import { config } from '../config.js';
 import { dismissPopups } from '../browser/popups.js';
 
 /** Mission types based on icon class patterns */
@@ -42,20 +41,23 @@ export const MISSION_TYPE_TO_NAME: Record<MissionType, string> = {
 
 /** Parse timer string (HH:MM:SS or MM:SS) to milliseconds */
 function parseTimerToMs(timerText: string): number {
-  const parts = timerText.trim().split(':').map(p => Number.parseInt(p, 10));
-  
+  const parts = timerText
+    .trim()
+    .split(':')
+    .map((p) => Number.parseInt(p, 10));
+
   if (parts.length === 3) {
     // HH:MM:SS
     const [hours, minutes, seconds] = parts;
     return (hours * 3600 + minutes * 60 + seconds) * 1000;
   }
-  
+
   if (parts.length === 2) {
     // MM:SS
     const [minutes, seconds] = parts;
     return (minutes * 60 + seconds) * 1000;
   }
-  
+
   return 0;
 }
 
@@ -65,7 +67,7 @@ function formatTime(ms: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  
+
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   }
@@ -165,10 +167,10 @@ export async function getAvailableMissions(
         // The speedup icon is in a child div with multiple classes
         const speedupIcon = startBtn.locator('.icon-game.icon-mission-speedup');
         const hasSpeedupIcon = (await speedupIcon.count()) > 0;
-        
+
         if (hasSpeedupIcon) {
           state = 'running';
-          
+
           // Parse timer if present
           const timerBlock = row.locator('.timer-block__main');
           if (await timerBlock.isVisible({ timeout: 500 }).catch(() => false)) {
@@ -178,9 +180,11 @@ export async function getAvailableMissions(
               `[getMissions] Mission "${name}": Running (${formatTime(timeRemainingMs)})`,
             );
           } else {
-            console.log(`[getMissions] Mission "${name}": Running (no timer found)`);
+            console.log(
+              `[getMissions] Mission "${name}": Running (no timer found)`,
+            );
           }
-          
+
           missions.push({
             type: missionType,
             name,
@@ -191,14 +195,16 @@ export async function getAvailableMissions(
           });
           continue;
         }
-        
+
         // Extract the mission-specific class (e.g., "mandatoryovertime--mission-start--button")
         const btnClass = (await startBtn.getAttribute('class')) || '';
         const missionBtnMatch = btnClass.match(/(\w+--mission-start--button)/);
         if (missionBtnMatch) {
           buttonSelector = `.${missionBtnMatch[1]}`;
         } else {
-          console.log(`[getMissions] Mission "${name}": No start button selector found`);
+          console.log(
+            `[getMissions] Mission "${name}": No start button selector found`,
+          );
           continue; // Skip if no start button class
         }
 
@@ -208,7 +214,7 @@ export async function getAvailableMissions(
           .catch(() => false);
         canStart = !isDisabled;
         state = canStart ? 'available' : 'disabled';
-        
+
         console.log(
           `[getMissions] Mission "${name}": ${canStart ? 'READY' : 'DISABLED'} (${buttonSelector})`,
         );
